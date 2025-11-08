@@ -294,6 +294,44 @@ function setupImageTransformLogic(node) {
     });
 }
 
+// Apply widget logic for MaskTransform node
+function setupMaskTransformLogic(node) {
+    const resizeByWidget = findWidgetByName(node, "resize_by");
+    const widthWidget = findWidgetByName(node, "width");
+    const heightWidget = findWidgetByName(node, "height");
+    const multiplierWidget = findWidgetByName(node, "multiplier");
+    
+    if (!resizeByWidget) return;
+    
+    const updateVisibility = () => {
+        const resizeBy = resizeByWidget.value;
+        
+        // FIXED: Inverted the logic
+        toggleWidget(node, widthWidget, resizeBy);
+        toggleWidget(node, heightWidget, resizeBy);
+        toggleWidget(node, multiplierWidget, !resizeBy);
+        
+        node.setDirtyCanvas(true);
+    };
+    
+    // Initial setup
+    updateVisibility();
+    
+    // Watch for changes using property descriptor - smZNodes style
+    let val = resizeByWidget.value;
+    Object.defineProperty(resizeByWidget, 'value', {
+        get() {
+            return val;
+        },
+        set(newVal) {
+            if (newVal !== val) {
+                val = newVal;
+                updateVisibility();
+            }
+        }
+    });
+}
+
 // Register extension
 app.registerExtension({
     name: "Comfy.TgszNodes.DynamicWidgets",
@@ -319,6 +357,9 @@ app.registerExtension({
                 break;
             case "ImageTransformNode":
                 setupImageTransformLogic(node);
+                break;
+            case "MaskTransformNode":
+                setupMaskTransformLogic(node);
                 break;
             case "DepthDOFNode":
                 setupDOFControls(node);

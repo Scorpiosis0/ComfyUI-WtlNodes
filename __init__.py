@@ -25,8 +25,17 @@ from .image.latentp import NODE_DISPLAY_NAME_MAPPINGS as LATA_DISPLAY
 from .image.image_trans import NODE_CLASS_MAPPINGS as IMGT_NODES
 from .image.image_trans import NODE_DISPLAY_NAME_MAPPINGS as IMGT_DISPLAY
 
+from .mask.mask_trans import NODE_CLASS_MAPPINGS as MASKT_NODES
+from .mask.mask_trans import NODE_DISPLAY_NAME_MAPPINGS as MASKT_DISPLAY
+
 from .mask.mask_processor import NODE_CLASS_MAPPINGS as MPROC_NODES
 from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
+
+from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as MPROC_NODES
+from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
+
+from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
+from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
 
 # -----------------------------------------------------------------
 #  Combine all categories into the global mappings
@@ -40,7 +49,9 @@ NODE_CLASS_MAPPINGS.update(TEMP_NODES)
 NODE_CLASS_MAPPINGS.update(DDOF_NODES)
 NODE_CLASS_MAPPINGS.update(LATA_NODES)
 NODE_CLASS_MAPPINGS.update(IMGT_NODES)
+NODE_CLASS_MAPPINGS.update(MASKT_NODES)
 NODE_CLASS_MAPPINGS.update(MPROC_NODES)
+NODE_CLASS_MAPPINGS.update(CSCH_NODES)
 
 NODE_DISPLAY_NAME_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS.update(SAT_DISPLAY)
@@ -51,7 +62,9 @@ NODE_DISPLAY_NAME_MAPPINGS.update(TEMP_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(DDOF_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(LATA_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(IMGT_DISPLAY)
+NODE_DISPLAY_NAME_MAPPINGS.update(MASKT_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(MPROC_DISPLAY)
+NODE_DISPLAY_NAME_MAPPINGS.update(CSCH_DISPLAY)
 
 # -----------------------------------------------------------------
 #  Aiohttp routes – now write to RAM instead of the filesystem
