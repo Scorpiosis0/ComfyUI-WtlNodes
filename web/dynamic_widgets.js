@@ -215,7 +215,7 @@ function setupSaturationControls(node) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
-                focus_depth: saturationWidget.value,
+                saturation: saturationWidget.value,
             })
         });
     };
@@ -232,7 +232,7 @@ function setupSaturationControls(node) {
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         // Create flag file to signal Python to exit loop
-        fetch('/tgsz_dof_control', {
+        fetch('/tgsz_sat_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -245,7 +245,7 @@ function setupSaturationControls(node) {
     // Add "Skip Effect" button  
     const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
         // Create flag file to signal Python to skip effect
-        fetch('/tgsz_dof_control', {
+        fetch('/tgsz_sat_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -322,6 +322,9 @@ app.registerExtension({
                 break;
             case "DepthDOFNode":
                 setupDOFControls(node);
+                break;
+            case "saturationNode":
+                setupSaturationControls(node);
                 break;
         }
     }

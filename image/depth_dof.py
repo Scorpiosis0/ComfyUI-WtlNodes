@@ -119,18 +119,7 @@ class DepthDOFNode(PreviewImage):
     # -----------------------------------------------------------------
     #  Core processing – only the preview‑loop part talks to the RAM store.
     # -----------------------------------------------------------------
-    def apply_dof(
-        self,
-        image,
-        depth_map,
-        focus_depth,
-        blur_strength,
-        focus_range,
-        edge_fix,
-        unique_id=None,
-        prompt=None,
-        extra_pnginfo=None,
-    ):
+    def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, unique_id=None, prompt=None, extra_pnginfo=None,):
 
         # -------------------------------------------------------------
         #  1️⃣  Clean any stale data for this node (mirrors old file‑cleanup)
@@ -177,9 +166,7 @@ class DepthDOFNode(PreviewImage):
                 )
                 while True:
                     # Grab the *latest* slider values sent by the UI
-                    cur_focus, cur_range, cur_edge = _get_params(
-                        uid, focus_depth, focus_range, edge_fix
-                    )
+                    cur_focus, cur_range, cur_edge = _get_params(uid, focus_depth, focus_range, edge_fix)
 
                     # Build a temporary mask with those live values
                     cur_mask = np.abs(depth - cur_focus)
@@ -274,7 +261,6 @@ class DepthDOFNode(PreviewImage):
                 )
         except Exception as e:
             print(f"[DOF] Preview error: {e}")
-
 
 # -----------------------------------------------------------------
 #  Node registration for ComfyUI (unchanged)

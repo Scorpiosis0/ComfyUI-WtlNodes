@@ -106,26 +106,27 @@ async def dof_control(request):
     print(f"[DOF] Flag '{action}' set for node {node_id}")
     return web.json_response({"status": "ok"})
 
+
 # -------------------------------------------------------------
 #  Slider‑parameter route
 # -------------------------------------------------------------
 @server.PromptServer.instance.routes.post("/tgsz_sat_params")
-async def dof_params(request):
+async def sat_params(request):
     """Handle slider parameter updates – store them in RAM."""
     data = await request.json()
     node_id = str(data.get("node_id"))          # <-- ensure string key
-    focus_depth = data.get("focus_depth")
+    saturation = data.get("saturation")
 
     # Basic validation (optional)
     if not node_id:
         return web.json_response({"status": "error", "reason": "node_id missing"}, status=400)
 
     # Push the new values into the shared in‑memory dict
-    from .image.depth_dof import _set_params
-    _set_params(node_id, focus_depth)
+    from .image.saturation import _set_params
+    _set_params(node_id, saturation)
 
-    print(f"[DOF] Params updated for node {node_id}: "
-          f"focus={focus_depth}")
+    print(f"[SAT] Params updated for node {node_id}: "
+          f"focus={saturation}")
     return web.json_response({"status": "ok"})
 
 
@@ -133,7 +134,7 @@ async def dof_params(request):
 #  Button‑press route (Apply / Skip)
 # -------------------------------------------------------------
 @server.PromptServer.instance.routes.post("/tgsz_sat_control")
-async def dof_control(request):
+async def sat_control(request):
     """Handle **Apply** / **Skip** button clicks – set an in‑memory flag."""
     data = await request.json()
     node_id = str(data.get("node_id"))               # <-- ensure string key
@@ -145,10 +146,10 @@ async def dof_control(request):
         )
 
     # Store the flag; the node will notice it on the next poll.
-    from .image.depth_dof import _set_flag
+    from .image.saturation import _set_flag
     _set_flag(node_id, action)
 
-    print(f"[DOF] Flag '{action}' set for node {node_id}")
+    print(f"[SAT] Flag '{action}' set for node {node_id}")
     return web.json_response({"status": "ok"})
 
 
