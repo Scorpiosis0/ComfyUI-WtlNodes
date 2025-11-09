@@ -2,6 +2,11 @@ Hi, I made this node pack because I wanted :)
 
 **Nodes list ⬇️**
 
+
+
+
+
+
 Dual Ease Cosine Scheduler:
 
 This node is a custom scheduler I made that needs further testing. It's been tested using FID (fréchet inception distance) along ablation to find the rought best default values.
@@ -13,9 +18,11 @@ Settings ⚙️:
 - rho_start : controls the strenght of the easing curve at the top
 - rho_end : controls the strenght of the easing curve at the bottom
 
+
 Visualize Sigma Schedule :
 
 This node will allow you to visualize sigma curves.
+
 
 Empty Latent (Advanced) :
 
