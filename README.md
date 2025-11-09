@@ -49,7 +49,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 | Node Name | Short Description | Link |
 |---|---|---|
 | Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
-| Empty Latent (Advanced) | Empty Latent node with QOL improvments. | [Jump to Section](#empty-latent-(advanced)) |
+| Empty Latent (Advanced) | Empty Latent node with QOL improvments. | [Jump to Section](#empty-latent-advanced) |
 | X | X | [Jump to Section](#anothernode) |
 | ... | ... | ... |
 
@@ -88,4 +88,4 @@ You can reduce the sigma_min value but I wouldn't recommend changing any other s
 
 **Recomended Usage:**
 
-You can reduce the sigma_min value but I wouldn't recommend changing any other settings.
+Nothing specific, it just adds QOL improvements, use it like the base Empty Latent Image node.
