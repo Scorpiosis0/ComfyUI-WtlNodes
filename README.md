@@ -89,3 +89,22 @@ You can reduce the sigma_min value but I wouldn't recommend changing any other s
 **Recomended Usage:**
 
 Nothing specific, it just adds QOL improvements, use it like the base Empty Latent Image node.
+
+### Depth of Field (DOF)
+*This node uses a depth map that you can make via any depth map model to apply a depth blur effect with a real time preview.*
+
+**Settings:**
+| Setting Name | Description |
+|-------------|-------------|
+| focus_depth | Ables you to set the focus point in the depth map, where 0 is the background and 1 the foreground. |
+| blur_strenght | Allows you to apply more or less blur on the depth that isn't in focus. |
+| focus_range | Allows you to choose the range/fall-off from the focus point to enlarge the focus range. |
+| edge_fix | On some depth models you might want to set this setting at a recomended value of 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects. |
+| Apply Effect | This button applies the effect of blur. |
+| Skip Effect | This button skips the effect of blur. |
+
+# Notes 🗒️:
+
+- I will add an emergency button to exist all loops, right now if you delete a node actively in a loop you will need to restart ComfyUI.
+- There are still some bugs I just release this because it's working enough.
+- I will add a button to auto apply/skip the effects.
