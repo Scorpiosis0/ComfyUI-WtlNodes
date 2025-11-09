@@ -29,3 +29,14 @@ This node will give you access to premade ratios resoltions sets along with regu
 - **resolution** : When in Ratio Mode this setting allows to set the desired resolution you want based on the ratio, all resoltion are 64 multiples to avoid genration artifacts.
 - **batch** : Controls how many latents are created at once.
 
+**Depth of Field (DOF)**:
+
+This node will able via a depth map to apply gaussian blur to your images with a live preview.
+
+**Settings** ⚙️:
+- **focus_depth** : This setting allows you to select where is the focus point on the depth map (0 being the background and 1 the foreground).
+- **blur_strenght** : This setting allows you to apply more or less blur on the depth that isn't in focus.
+- **focus_range** : This setting allows you to choose the range/fall-off from the focus point to enlarge the focus range.
+- **edge_fix** : On some depth models you might want to set this setting at a value 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects.
+- **Apply Effect** : This button applies the effect of blur.
+- **Skip Effect** : This button skips the effect of blur.
