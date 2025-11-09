@@ -49,7 +49,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 | Node Name | Short Description | Link |
 |---|---|---|
 | Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
-| X | X | [Jump to Section](#yournextnode) |
+| Empty Latent (Advanced) | Empty Latent node with QOL improvments. | [Jump to Section](#empty-latent-(advanced)) |
 | X | X | [Jump to Section](#anothernode) |
 | ... | ... | ... |
 
@@ -73,3 +73,19 @@ Use the summary table below to quickly jump to any node’s documentation.
 
 You can reduce the sigma_min value but I wouldn't recommend changing any other settings.
 
+### Empty Latent (Advanced)
+*This node will offer easy ratio selection along a plethora of resolutions, portrait and landscape mode, with still a manual mode.*
+
+**Settings:**
+| Setting Name | Description |
+|-------------|-------------|
+| use_ratio | Ables you to switch between Ratio Mode and Manual Mode. |
+| portrait_landscape | Ables you to switch between Portrait and Landscape while in ratio mode, thus inverting x and y values. |
+| ratio | Allows you to select a ratio from a predefined list. |
+| resolution | Allows you to select a resolution from a predefined list based on the ratio. All resolutions are multiples of 64 to avoid generation artifacts. |
+| width & height | Allows you to select the x and y resolution of the image manually. |
+| batch | Allows you to select the amount of created latent in one run. |
+
+**Recomended Usage:**
+
+You can reduce the sigma_min value but I wouldn't recommend changing any other settings.
