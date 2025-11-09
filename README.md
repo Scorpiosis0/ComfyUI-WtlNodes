@@ -48,7 +48,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 ## 📚 Summary Table
 | Node Name | Short Description | Link |
 |---|---|---|
-| YourNodeNameHere | One sentence describing this node. | [Jump to Section](#yournodenamehere) |
+| Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#yournodenamehere) |
 | YourNextNode | One sentence describing this node. | [Jump to Section](#yournextnode) |
 | AnotherNode | One sentence describing this node. | [Jump to Section](#anothernode) |
 | ... | ... | ... |
@@ -57,15 +57,15 @@ Use the summary table below to quickly jump to any node’s documentation.
 
 ## 🧩 Node Documentation
 
-### YourNodeNameHere
-*A short paragraph describing what this node does.*
+### Dual Ease Cosine Scheduler
+*This node is a custom scheduler I made that needs further testing. It's been tested using FID (Fréchet Inception Distance) along ablation to find the rough best default values.*
 
 **Settings**
 | Setting Name | Description |
 |-------------|-------------|
-| SettingOne | Short explanation of what this setting controls. |
-| SettingTwo | Short explanation of how this influences the result. |
-| SettingThree | Optional setting description. |
+| steps | controls how many steps will be made |
+| sigma_max | controls the maximum sigma (max noise) |
+| min_sigma | controls the minimum sigma (min noise) |
 
 **Example Usage**
 ```text
