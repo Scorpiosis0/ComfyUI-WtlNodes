@@ -69,5 +69,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 | rho_start | Controls the strenght of the easing curve at the top. |
 | rho_end | Controls the strenght of the easing curve at the bottom. |
 
-**Recomended Usage**
+**Recomended Usage:**
+
+You can reduce the sigma_min value but I wouldn't recommend changing any other settings.
 
