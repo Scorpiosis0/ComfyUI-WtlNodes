@@ -31,9 +31,6 @@ from .mask.mask_trans import NODE_DISPLAY_NAME_MAPPINGS as MASKT_DISPLAY
 from .mask.mask_processor import NODE_CLASS_MAPPINGS as MPROC_NODES
 from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
 
-from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as MPROC_NODES
-from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
-
 from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
 from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
 
