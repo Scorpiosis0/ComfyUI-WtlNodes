@@ -40,3 +40,9 @@ This node will able via a depth map to apply gaussian blur to your images with a
 - **edge_fix** : On some depth models you might want to set this setting at a value 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects.
 - **Apply Effect** : This button applies the effect of blur.
 - **Skip Effect** : This button skips the effect of blur.
+
+# Notes 🗒️:
+
+- I will add an emergency button to exist all loops, right now if you delete a node actively in a loop you will need to restart ComfyUI.
+- There are still some bugs I just release this because it's working enough.
+- I will add a button to auto apply/skip the effects.
