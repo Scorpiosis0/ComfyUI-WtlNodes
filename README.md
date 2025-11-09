@@ -50,7 +50,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 |---|---|---|
 | Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
 | Empty Latent (Advanced) | Empty Latent node with QOL improvments. | [Jump to Section](#empty-latent-advanced) |
-| Depth of Field (DOF) | Applies DoF based on a depth map. | [Jump to Section](#depth-of-field-Dof) |
+| Depth of Field (DOF) | Applies DoF based on a depth map. | [Jump to Section](#depth-of-field-dof) |
 ---
 
 ## 🧩 Node Documentation
