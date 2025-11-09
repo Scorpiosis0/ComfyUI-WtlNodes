@@ -49,8 +49,8 @@ Use the summary table below to quickly jump to any node’s documentation.
 | Node Name | Short Description | Link |
 |---|---|---|
 | Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
-| YourNextNode | One sentence describing this node. | [Jump to Section](#yournextnode) |
-| AnotherNode | One sentence describing this node. | [Jump to Section](#anothernode) |
+| X | X | [Jump to Section](#yournextnode) |
+| X | X | [Jump to Section](#anothernode) |
 | ... | ... | ... |
 
 ---
