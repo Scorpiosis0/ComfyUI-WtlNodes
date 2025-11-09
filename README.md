@@ -48,7 +48,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 ## 📚 Summary Table
 | Node Name | Short Description | Link |
 |---|---|---|
-| Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#yournodenamehere) |
+| Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
 | YourNextNode | One sentence describing this node. | [Jump to Section](#yournextnode) |
 | AnotherNode | One sentence describing this node. | [Jump to Section](#anothernode) |
 | ... | ... | ... |
@@ -60,13 +60,14 @@ Use the summary table below to quickly jump to any node’s documentation.
 ### Dual Ease Cosine Scheduler
 *This node is a custom scheduler I made that needs further testing. It's been tested using FID (Fréchet Inception Distance) along ablation to find the rough best default values.*
 
-**Settings**
+**Settings:**
 | Setting Name | Description |
 |-------------|-------------|
-| steps | controls how many steps will be made |
-| sigma_max | controls the maximum sigma (max noise) |
-| min_sigma | controls the minimum sigma (min noise) |
+| steps | Controls how many steps will be made. |
+| sigma_max | Controls the maximum sigma (max noise). |
+| min_sigma | Controls the minimum sigma (min noise). |
+| rho_start | Controls the strenght of the easing curve at the top. |
+| rho_end | Controls the strenght of the easing curve at the bottom. |
 
-**Example Usage**
-```text
-(Optional) Describe how or when this node is typically used.
+**Recomended Usage**
+
