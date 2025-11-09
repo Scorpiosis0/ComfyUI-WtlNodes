@@ -28,7 +28,7 @@ Each node is plug-and-play and appears directly inside ComfyUI after installatio
 
 ```bash
 cd ComfyUI/custom_nodes/
-git clone https://github.com/YourUserName/YourNodePack.git
+git clone https://github.com/Scorpiosis0/ComfyUI-WtlNodes.git
 ```
 
 ### **Option 2 — Manual Install**
