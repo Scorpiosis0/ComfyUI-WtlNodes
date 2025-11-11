@@ -99,6 +99,11 @@ class DepthDOFNode(PreviewImage):
                     "max": 5,
                     "step": 1,
                 }),
+                "auto_apply": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "On",
+                    "label_off": "Off"
+                }),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -119,7 +124,7 @@ class DepthDOFNode(PreviewImage):
     # -----------------------------------------------------------------
     #  Core processing – only the preview‑loop part talks to the RAM store.
     # -----------------------------------------------------------------
-    def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, unique_id=None, prompt=None, extra_pnginfo=None,):
+    def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
         # -------------------------------------------------------------
         #  1️⃣  Clean any stale data for this node (mirrors old file‑cleanup)
@@ -164,7 +169,7 @@ class DepthDOFNode(PreviewImage):
                     f"[DOF] Starting preview loop for node {uid}. "
                     "Adjust sliders, then press **Apply Effect**."
                 )
-                while True:
+                while True & auto_apply == False:
                     # Grab the *latest* slider values sent by the UI
                     cur_focus, cur_range, cur_edge = _get_params(uid, focus_depth, focus_range, edge_fix)
 
@@ -199,7 +204,7 @@ class DepthDOFNode(PreviewImage):
                         return (image, empty_mask)
 
                     # Throttle the loop a little so we don’t hammer the CPU
-                    time.sleep(0.5)
+                    time.sleep(1)
 
             # ---- real effect (unchanged) -----------------------------
             img_uint8 = (img * 255).astype(np.uint8)

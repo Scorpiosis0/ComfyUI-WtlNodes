@@ -136,11 +136,12 @@ function setupDOFControls(node) {
     const sendParams = () => {
         if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget) return;
         
-        fetch('/tgsz_dof_params', {
+        fetch('/tgsz_params', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'dof',
                 focus_depth: focusDepthWidget.value,
                 focus_range: focusRangeWidget.value,
                 edge_fix: edgeFixWidget.value
@@ -176,11 +177,12 @@ function setupDOFControls(node) {
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         // Create flag file to signal Python to exit loop
-        fetch('/tgsz_dof_control', {
+        fetch('/tgsz_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'dof',
                 action: 'apply'
             })
         });
@@ -189,11 +191,12 @@ function setupDOFControls(node) {
     // Add "Skip Effect" button  
     const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
         // Create flag file to signal Python to skip effect
-        fetch('/tgsz_dof_control', {
+        fetch('/tgsz_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'dof',
                 action: 'skip'
             })
         });
@@ -210,11 +213,12 @@ function setupSaturationControls(node) {
     const sendParams = () => {
         if (!saturationWidget) return;
         
-        fetch('/tgsz_sat_params', {
+        fetch('/tgsz_params', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'sat',
                 saturation: saturationWidget.value,
             })
         });
@@ -232,11 +236,12 @@ function setupSaturationControls(node) {
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         // Create flag file to signal Python to exit loop
-        fetch('/tgsz_sat_control', {
+        fetch('/tgsz_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'sat',
                 action: 'apply'
             })
         });
@@ -245,11 +250,12 @@ function setupSaturationControls(node) {
     // Add "Skip Effect" button  
     const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
         // Create flag file to signal Python to skip effect
-        fetch('/tgsz_sat_control', {
+        fetch('/tgsz_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 node_id: node.id,
+                node_type: 'sat',
                 action: 'skip'
             })
         });

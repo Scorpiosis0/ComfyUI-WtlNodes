@@ -47,6 +47,62 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
+def _saturation_hsv(image, saturation):
+
+    img_np = image.cpu().numpy()[0]  # shape: H, W, C
+    r, g, b = img_np[..., 0], img_np[..., 1], img_np[..., 2]
+    max_c = np.maximum(np.maximum(r, g), b)
+    min_c = np.minimum(np.minimum(r, g), b)
+    delta = max_c - min_c
+
+    v = max_c
+    s = np.where(max_c != 0, delta / max_c, 0)
+
+    h = np.zeros_like(max_c)
+    mask = (delta != 0)
+    # red max
+    mask_r = mask & (r == max_c)
+    h[mask_r] = 60 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6)
+    # green max
+    mask_g = mask & (g == max_c)
+    h[mask_g] = 60 * (((b[mask_g] - r[mask_g]) / delta[mask_g]) + 2)
+    # blue max
+    mask_b = mask & (b == max_c)
+    h[mask_b] = 60 * (((r[mask_b] - g[mask_b]) / delta[mask_b]) + 4)
+    h = h % 360
+
+    # Apply saturation
+    s = np.clip(s * (1+saturation/100), 0, 1)
+
+    # HSV -> RGB
+    c = v * s
+    x = c * (1 - np.abs((h / 60) % 2 - 1))
+    m = v - c
+    h_i = (h / 60).astype(int)
+
+    r_out = np.zeros_like(h)
+    g_out = np.zeros_like(h)
+    b_out = np.zeros_like(h)
+
+    # 0-5
+    mask0 = h_i == 0
+    r_out[mask0], g_out[mask0], b_out[mask0] = c[mask0], x[mask0], 0
+    mask1 = h_i == 1
+    r_out[mask1], g_out[mask1], b_out[mask1] = x[mask1], c[mask1], 0
+    mask2 = h_i == 2
+    r_out[mask2], g_out[mask2], b_out[mask2] = 0, c[mask2], x[mask2]
+    mask3 = h_i == 3
+    r_out[mask3], g_out[mask3], b_out[mask3] = 0, x[mask3], c[mask3]
+    mask4 = h_i == 4
+    r_out[mask4], g_out[mask4], b_out[mask4] = x[mask4], 0, c[mask4]
+    mask5 = h_i == 5
+    r_out[mask5], g_out[mask5], b_out[mask5] = c[mask5], 0, x[mask5]
+
+    cur_image_np = np.stack([r_out + m, g_out + m, b_out + m], axis=-1)
+    cur_image = torch.from_numpy(cur_image_np).unsqueeze(0).to(image.device)
+    cur_image = torch.clamp(cur_image, 0.0, 1.0)
+    return(cur_image)
+
 class saturationNode(PreviewImage):
     @classmethod
     def INPUT_TYPES(cls):
@@ -59,7 +115,12 @@ class saturationNode(PreviewImage):
                     "max": 100.0,
                     "step": 1.0,
                     "round": 0.1,
-                })
+                }),
+                "auto_apply": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "On",
+                    "label_off": "Off"
+                }),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -72,7 +133,7 @@ class saturationNode(PreviewImage):
     FUNCTION="saturation"
     CATEGORY = "WtlNodes/image"
 
-    def saturation(self, image, saturation, unique_id=None, prompt=None, extra_pnginfo=None,):
+    def saturation(self, image, saturation, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
         # -------------------------------------------------------------
         #  1️⃣  Clean any stale data for this node (mirrors old file‑cleanup)
@@ -93,64 +154,57 @@ class saturationNode(PreviewImage):
         # -------------------------------------------------------------
 
         batch_size = image.shape[0]
-        result = image.clone()
 
         for b in range(batch_size):
-            print(f"Hello")
             cur_image = image[b:b+1]
             # ---- preview loop (only when we have a UI node id) ---- #?
             if unique_id is not None:
                 print(f"No unique ID exist!")
 
             if unique_id:
-                print(f"Anyone here?")
                 uid = str(unique_id)
                 print(
                     f"[SAT] Starting preview loop for node {uid}. "
                     "Adjust sliders, then press **Apply Effect**."
                 )
-                while True:
+                while True & auto_apply == False:
                     # Grab the *latest* slider values sent by the UI
                     cur_saturation = _get_params(uid, saturation)
-                    print(f"And here?")
                     # Build a temporary mask with those live values
-                    grayscale = (image[..., 0:1] * 0.299 + image[..., 1:2] * 0.587 + image[..., 2:3] * 0.114)
-                    grayscale_rgb = grayscale.repeat(1, 1, 1, 3)
-
-                    cur_image = grayscale_rgb + (image - grayscale_rgb) * (1+cur_saturation/100)
+                    cur_image = _saturation_hsv(image, cur_saturation)
+                    # Resize to 1MP
+                    cur_image = cur_image[0].cpu().numpy()  # shape: H,W,C
+                    H, W, C = cur_image.shape
+                    target_pixels = 1024*1024
+                    scale = (target_pixels / (H * W)) ** 0.5
+                    new_H = max(1, int(H * scale))
+                    new_W = max(1, int(W * scale))
+                    cur_image = cv2.resize(cur_image, (new_W, new_H), interpolation=cv2.INTER_LANCZOS4)
+                    # Convert back to tensor
+                    cur_image = torch.from_numpy(cur_image).unsqueeze(0).to(cur_image.device)
                     cur_image = torch.clamp(cur_image, 0.0, 1.0)
                     # Show a quick preview in the UI
                     self._preview_image(cur_image, uid, prompt, extra_pnginfo)
 
-                    # -------------------------------------------------
                     #  Check for button presses
-                    # -------------------------------------------------
                     if _check_and_clear_flag(uid, "apply"):
                         print(f"[SAT] **Apply** pressed for node {uid}.")
                         saturation = (
                             cur_saturation
                         )
-                        image = cur_image
                         break   # exit preview loop
 
                     if _check_and_clear_flag(uid, "skip"):
                         print(f"[SAT] **Skip** pressed for node {uid}.")
-                        return (image)
+                        return (image,)
 
                     # Throttle the loop a little so we don’t hammer the CPU
-                    time.sleep(0.5)
-            print(f"U there?")
-            # ---- real effect (unchanged) -----------------------------
-            grayscale = (image[..., 0:1] * 0.299 + image[..., 1:2] * 0.587 + image[..., 2:3] * 0.114)
-            grayscale_rgb = grayscale.repeat(1, 1, 1, 3)
-
-            result[b:b+1] = grayscale_rgb + (image - grayscale_rgb) * (1+saturation/100)
-            result[b:b+1] = torch.clamp(result[b:b+1], 0.0, 1.0)
-        return (result,)
+                    time.sleep(1)
+                # real effect (unchanged)
+                result = _saturation_hsv(image, saturation)
+            return (result,)
     
-    # -----------------------------------------------------------------
     #  Helper that pushes a mask preview to the UI (unchanged)
-    # -----------------------------------------------------------------
     def _preview_image(self, image, unique_id, prompt, extra_pnginfo):
         """Preview the image in real‑time."""
         try:
@@ -177,4 +231,4 @@ class saturationNode(PreviewImage):
             print(f"[SAT] Preview error: {e}")
     
 NODE_CLASS_MAPPINGS = {"saturationNode": saturationNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"saturationNode": "Saturation"}
+NODE_DISPLAY_NAME_MAPPINGS = {"saturationNode": "Saturation (HSV)"}
