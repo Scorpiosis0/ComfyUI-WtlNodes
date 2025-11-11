@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import time
 import threading
-from ..helper.live_preview_resizer import live_preview_resizer
 from nodes import PreviewImage
 
 _CONTROL_STORE: dict[str, dict] = {}
@@ -154,7 +153,6 @@ class DepthDOFNode(PreviewImage):
                     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
                     cur_mask = cv2.dilate(cur_mask, kernel, iterations=1)
                     cur_mask = cv2.erode(cur_mask, kernel, iterations=1)
-                    cur_mask = live_preview_resizer(cur_mask)
                     # Show a quick preview in the UI
                     self._preview_mask(cur_mask, uid, prompt, extra_pnginfo)
 

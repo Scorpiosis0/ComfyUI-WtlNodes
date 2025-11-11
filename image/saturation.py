@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import time
 import threading
-from ..helper.live_preview_resizer import live_preview_resizer
 from nodes import PreviewImage
 
 _CONTROL_STORE: dict[str, dict] = {}
@@ -162,7 +161,6 @@ class saturationNode(PreviewImage):
                     cur_saturation = _get_params(uid, saturation)
                     # Build a temporary mask with those live values
                     cur_image = _saturation_hsv(image, cur_saturation)
-                    cur_image = live_preview_resizer(cur_image)
                     # Show a quick preview in the UI
                     self._preview_image(cur_image, uid, prompt, extra_pnginfo)
 
