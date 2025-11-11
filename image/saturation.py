@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import time
 import threading
+from ..helper.live_preview_resizer import live_preview_resizer
 from nodes import PreviewImage
 
 _CONTROL_STORE: dict[str, dict] = {}
@@ -135,24 +136,17 @@ class saturationNode(PreviewImage):
 
     def saturation(self, image, saturation, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
-        # -------------------------------------------------------------
-        #  1️⃣  Clean any stale data for this node (mirrors old file‑cleanup)
-        # -------------------------------------------------------------
+        # Clean any stale data for this node (mirrors old file‑cleanup)
         if unique_id:
             uid = str(unique_id)          # ensure consistent key type
             _clear_all(uid)
 
-        # -------------------------------------------------------------
-        #  2️⃣  Early‑out if the user pressed **Skip**
-        # -------------------------------------------------------------
+        # Early‑out if the user pressed **Skip**
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             batch_size = image.shape[0]
             return (image)
 
-        # -------------------------------------------------------------
-        #  3️⃣  Convert tensors to numpy for the heavy lifting
-        # -------------------------------------------------------------
-
+        # Convert tensors to numpy for the heavy lifting
         batch_size = image.shape[0]
 
         for b in range(batch_size):
@@ -163,70 +157,39 @@ class saturationNode(PreviewImage):
 
             if unique_id:
                 uid = str(unique_id)
-                print(
-                    f"[SAT] Starting preview loop for node {uid}. "
-                    "Adjust sliders, then press **Apply Effect**."
-                )
                 while True & auto_apply == False:
                     # Grab the *latest* slider values sent by the UI
                     cur_saturation = _get_params(uid, saturation)
                     # Build a temporary mask with those live values
                     cur_image = _saturation_hsv(image, cur_saturation)
-                    # Resize to 1MP
-                    cur_image = cur_image[0].cpu().numpy()  # shape: H,W,C
-                    H, W, C = cur_image.shape
-                    target_pixels = 1024*1024
-                    scale = (target_pixels / (H * W)) ** 0.5
-                    new_H = max(1, int(H * scale))
-                    new_W = max(1, int(W * scale))
-                    cur_image = cv2.resize(cur_image, (new_W, new_H), interpolation=cv2.INTER_LANCZOS4)
-                    # Convert back to tensor
-                    cur_image = torch.from_numpy(cur_image).unsqueeze(0).to(cur_image.device)
-                    cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                    cur_image = live_preview_resizer(cur_image)
                     # Show a quick preview in the UI
                     self._preview_image(cur_image, uid, prompt, extra_pnginfo)
 
                     #  Check for button presses
                     if _check_and_clear_flag(uid, "apply"):
-                        print(f"[SAT] **Apply** pressed for node {uid}.")
-                        saturation = (
-                            cur_saturation
-                        )
+                        saturation = (cur_saturation)
                         break   # exit preview loop
 
                     if _check_and_clear_flag(uid, "skip"):
-                        print(f"[SAT] **Skip** pressed for node {uid}.")
                         return (image,)
-
-                    # Throttle the loop a little so we don’t hammer the CPU
+                    
                     time.sleep(1)
-                # real effect (unchanged)
+                # real effect
                 result = _saturation_hsv(image, saturation)
             return (result,)
     
-    #  Helper that pushes a mask preview to the UI (unchanged)
+    # Helper that pushes a mask preview to the UI (unchanged)
     def _preview_image(self, image, unique_id, prompt, extra_pnginfo):
         """Preview the image in real‑time."""
         try:
-            result = self.save_images(
-                image,
-                filename_prefix="sat_preview_",
-                prompt=prompt,
-                extra_pnginfo=extra_pnginfo,
-            )
+            result = self.save_images(image, filename_prefix="sat_preview_", prompt=prompt, extra_pnginfo=extra_pnginfo,)
 
             # Send preview to UI via websocket (ComfyUI internal API)
             import server
 
             if hasattr(server.PromptServer, "instance"):
-                server.PromptServer.instance.send_sync(
-                    "executed",
-                    {
-                        "node": unique_id,
-                        "output": {"images": result["ui"]["images"]},
-                        "prompt_id": None,
-                    },
-                )
+                server.PromptServer.instance.send_sync("executed", {"node": unique_id, "output": {"images": result["ui"]["images"]}, "prompt_id": None})
         except Exception as e:
             print(f"[SAT] Preview error: {e}")
     

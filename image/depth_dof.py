@@ -3,19 +3,9 @@ import cv2
 import numpy as np
 import time
 import threading
+from ..helper.live_preview_resizer import live_preview_resizer
 from nodes import PreviewImage
 
-# -----------------------------------------------------------------
-#  In‑memory control store (shared with the aiohttp routes)
-# -----------------------------------------------------------------
-# {
-#     "<node_id>": {
-#         "params": (focus_depth, blur_strength, focus_range),   # latest slider values
-#         "flags":  {"apply": bool, "skip": bool}               # last button press
-#     },
-#     ...
-# }
-# -----------------------------------------------------------------
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
 
@@ -61,10 +51,6 @@ def _clear_all(node_id: str) -> None:
         _CONTROL_STORE.pop(node_id, None)
 
 class DepthDOFNode(PreviewImage):
-    """
-    Depth‑of‑Field node with a live‑preview loop.
-    All UI‑to‑Python communication now lives in RAM, not on disk.
-    """
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -121,29 +107,21 @@ class DepthDOFNode(PreviewImage):
         super().__init__()
         # No on‑disk directory needed any more.
 
-    # -----------------------------------------------------------------
-    #  Core processing – only the preview‑loop part talks to the RAM store.
-    # -----------------------------------------------------------------
+    # Core processing – only the preview‑loop part talks to the RAM store.
     def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
-        # -------------------------------------------------------------
-        #  1️⃣  Clean any stale data for this node (mirrors old file‑cleanup)
-        # -------------------------------------------------------------
+        # Clean any stale data for this node (mirrors old file‑cleanup)
         if unique_id:
             uid = str(unique_id)          # ensure consistent key type
             _clear_all(uid)
 
-        # -------------------------------------------------------------
-        #  2️⃣  Early‑out if the user pressed **Skip**
-        # -------------------------------------------------------------
+        # Early‑out if the user pressed **Skip**
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             batch_size = image.shape[0]
             empty_mask = torch.zeros((batch_size, image.shape[1], image.shape[2]))
             return (image, empty_mask)
 
-        # -------------------------------------------------------------
-        #  3️⃣  Convert tensors to numpy for the heavy lifting
-        # -------------------------------------------------------------
+        # Convert tensors to numpy for the heavy lifting
         img_np   = image.cpu().numpy()
         depth_np = depth_map.cpu().numpy()
 
@@ -152,7 +130,7 @@ class DepthDOFNode(PreviewImage):
         masks = []
 
         for b in range(batch_size):
-            # ---- image / depth preparation (identical to original) ----
+            # image / depth preparation (identical to original)
             img = img_np[b]
             depth = depth_np[b]
 
@@ -160,39 +138,30 @@ class DepthDOFNode(PreviewImage):
                 depth = np.mean(depth, axis=-1, keepdims=True)
 
             # Normalise depth to 0‑1
-            depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8) #?
+            depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
 
-            # ---- preview loop (only when we have a UI node id) ---- #?
+            # preview loop (only when we have a UI node id)
             if unique_id:
                 uid = str(unique_id)
-                print(
-                    f"[DOF] Starting preview loop for node {uid}. "
-                    "Adjust sliders, then press **Apply Effect**."
-                )
                 while True & auto_apply == False:
                     # Grab the *latest* slider values sent by the UI
                     cur_focus, cur_range, cur_edge = _get_params(uid, focus_depth, focus_range, edge_fix)
 
                     # Build a temporary mask with those live values
                     cur_mask = np.abs(depth - cur_focus)
-                    cur_mask = np.clip(cur_mask / cur_range, 0, 1).squeeze() #?
+                    cur_mask = np.clip(cur_mask / cur_range, 0, 1).squeeze()
                     kernel_size = abs(cur_edge) * 2 + 1
                     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
                     cur_mask = cv2.dilate(cur_mask, kernel, iterations=1)
                     cur_mask = cv2.erode(cur_mask, kernel, iterations=1)
+                    cur_mask = live_preview_resizer(cur_mask)
                     # Show a quick preview in the UI
                     self._preview_mask(cur_mask, uid, prompt, extra_pnginfo)
 
-                    # -------------------------------------------------
-                    #  Check for button presses
-                    # -------------------------------------------------
+                    # Check for button presses
                     if _check_and_clear_flag(uid, "apply"):
                         print(f"[DOF] **Apply** pressed for node {uid}.")
-                        focus_depth, focus_range, edge_fix = (
-                            cur_focus,
-                            cur_range,
-                            cur_edge,
-                        )
+                        focus_depth, focus_range, edge_fix = (cur_focus, cur_range, cur_edge)
                         blur_mask = cur_mask          # final mask for this batch
                         break   # exit preview loop
 
@@ -215,8 +184,7 @@ class DepthDOFNode(PreviewImage):
 
             if kernel_size > 1:
                 blurred = cv2.GaussianBlur(
-                    img_uint8, (kernel_size, kernel_size), 0
-                )
+                    img_uint8, (kernel_size, kernel_size), 0)
                 blurred = blurred.astype(np.float32) / 255.0
             else:
                 blurred = img
@@ -245,25 +213,14 @@ class DepthDOFNode(PreviewImage):
         mask_tensor = torch.from_numpy(mask_rgb[np.newaxis, ...]).float()
 
         try:
-            result = self.save_images(
-                mask_tensor,
-                filename_prefix="dof_preview_",
-                prompt=prompt,
-                extra_pnginfo=extra_pnginfo,
-            )
+            result = self.save_images(mask_tensor, filename_prefix="dof_preview_", prompt=prompt, extra_pnginfo=extra_pnginfo)
 
             # Send preview to UI via websocket (ComfyUI internal API)
             import server
 
             if hasattr(server.PromptServer, "instance"):
-                server.PromptServer.instance.send_sync(
-                    "executed",
-                    {
-                        "node": unique_id,
-                        "output": {"images": result["ui"]["images"]},
-                        "prompt_id": None,
-                    },
-                )
+                server.PromptServer.instance.send_sync("executed", {"node": unique_id, "output": {"images": result["ui"]["images"]}, "prompt_id": None})
+
         except Exception as e:
             print(f"[DOF] Preview error: {e}")
 
