@@ -34,9 +34,7 @@ from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
 from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
 from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
 
-# -----------------------------------------------------------------
-#  Combine all categories into the global mappings
-# -----------------------------------------------------------------
+# Combine all categories into the global mappings
 NODE_CLASS_MAPPINGS = {}
 NODE_CLASS_MAPPINGS.update(SAT_NODES)
 NODE_CLASS_MAPPINGS.update(BRIGHT_NODES)
@@ -63,7 +61,7 @@ NODE_DISPLAY_NAME_MAPPINGS.update(MASKT_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(MPROC_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(CSCH_DISPLAY)
 
-#  Aiohttp routes – now write to RAM instead of the filesystem
+# Aiohttp routes – now write to RAM instead of the filesystem
 from aiohttp import web
 import server
 
@@ -79,7 +77,7 @@ NODE_HANDLERS = {
     }
 }
 
-#  Slider‑parameter route
+# Slider‑parameter route
 @server.PromptServer.instance.routes.post("/tgsz_params")
 async def tgsz_params(request):
     """Handle slider parameter updates – store them in RAM."""
@@ -106,7 +104,7 @@ async def tgsz_params(request):
     print(f"[{node_type.upper()}] Params updated for node {node_id}")
     return web.json_response({"status": "ok"})
 
-#  Button‑press route (Apply / Skip)
+# Button‑press route (Apply / Skip)
 @server.PromptServer.instance.routes.post("/tgsz_control")
 async def tgsz_control(request):
     """Handle **Apply** / **Skip** button clicks – set an in‑memory flag."""
@@ -136,8 +134,7 @@ async def tgsz_control(request):
     print(f"[{node_type.upper()}] Flag '{action}' set for node {node_id}")
     return web.json_response({"status": "ok"})
 
-
-#  Static web assets (unchanged)
+# Static web assets (unchanged)
 WEB_DIRECTORY = "./web"
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

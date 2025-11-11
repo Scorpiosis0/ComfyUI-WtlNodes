@@ -101,7 +101,8 @@ class AdvancedEmptyLatent:
             }
         }
     
-    RETURN_TYPES = ("LATENT",)
+    RETURN_TYPES = ("LATENT", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("Latent", "Latent Width", "Latent Height", "Width", "Height")
     FUNCTION = "generate"
     CATEGORY = "latent"
 
@@ -123,7 +124,7 @@ class AdvancedEmptyLatent:
         # Create empty latent (SDXL uses 4 channels)
         latent = torch.zeros([batch_size, 4, latent_height, latent_width])
         
-        return ({"samples": latent},)
+        return ({"samples": latent}, latent_width, latent_height, w, h)
 
 
 # This is a helper node that's not directly visible but used internally

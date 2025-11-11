@@ -155,6 +155,7 @@ class DepthDOFNode(PreviewImage):
                     cur_mask = cv2.erode(cur_mask, kernel, iterations=1)
                     # Show a quick preview in the UI
                     self._preview_mask(cur_mask, uid, prompt, extra_pnginfo)
+                    print(f"Sent Preview to def.")
 
                     # Check for button presses
                     if _check_and_clear_flag(uid, "apply"):
@@ -199,7 +200,7 @@ class DepthDOFNode(PreviewImage):
         # -------------------------------------------------------------
         output_img  = torch.from_numpy(np.stack(results)).float()
         output_mask = torch.from_numpy(np.stack(masks)).float()
-        print("[DOF] Effect applied – returning final image.")
+        print(f"[DOF] Effect applied – returning final image.")
         return (output_img, output_mask)
 
     # -----------------------------------------------------------------
@@ -215,6 +216,7 @@ class DepthDOFNode(PreviewImage):
 
             # Send preview to UI via websocket (ComfyUI internal API)
             import server
+            print(f"Sent Preview to WebSocket.")
 
             if hasattr(server.PromptServer, "instance"):
                 server.PromptServer.instance.send_sync("executed", {"node": unique_id, "output": {"images": result["ui"]["images"]}, "prompt_id": None})
