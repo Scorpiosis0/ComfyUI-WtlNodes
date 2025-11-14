@@ -34,6 +34,9 @@ from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
 from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
 from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
 
+from .image.ram_preview import NODE_CLASS_MAPPINGS as RAMP_NODES
+from .image.ram_preview import NODE_DISPLAY_NAME_MAPPINGS as RAMP_DISPLAY
+
 # Combine all categories into the global mappings
 NODE_CLASS_MAPPINGS = {}
 NODE_CLASS_MAPPINGS.update(SAT_NODES)
@@ -47,6 +50,7 @@ NODE_CLASS_MAPPINGS.update(IMGT_NODES)
 NODE_CLASS_MAPPINGS.update(MASKT_NODES)
 NODE_CLASS_MAPPINGS.update(MPROC_NODES)
 NODE_CLASS_MAPPINGS.update(CSCH_NODES)
+NODE_CLASS_MAPPINGS.update(RAMP_NODES)
 
 NODE_DISPLAY_NAME_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS.update(SAT_DISPLAY)
@@ -60,10 +64,11 @@ NODE_DISPLAY_NAME_MAPPINGS.update(IMGT_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(MASKT_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(MPROC_DISPLAY)
 NODE_DISPLAY_NAME_MAPPINGS.update(CSCH_DISPLAY)
+NODE_DISPLAY_NAME_MAPPINGS.update(RAMP_DISPLAY)
 
 # Aiohttp routes – now write to RAM instead of the filesystem
-from aiohttp import web
 import server
+from aiohttp import web
 
 # Create a registry for node handlers
 NODE_HANDLERS = {
