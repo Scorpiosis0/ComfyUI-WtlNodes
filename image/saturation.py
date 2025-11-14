@@ -7,6 +7,7 @@ import base64
 import io
 from PIL import Image
 import server
+import math
 
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
@@ -107,9 +108,6 @@ def _saturation_hsv(image, saturation):
     return(cur_image)
 
 class saturationNode:
-    def __init__(self):
-        self.compress_level = 4
-
     @classmethod
     def INPUT_TYPES(cls):
         return{
@@ -160,12 +158,24 @@ class saturationNode:
                 # Build a temporary image with those live values
                 cur_image = _saturation_hsv(image, cur_saturation)
                 
-                # Generate RAM preview and send via websocket
+                # Convert to PIL Image
                 i = 255. * cur_image[0].cpu().numpy()
                 img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
                 
+                # Resize to 1MP (1 megapixel = 1,000,000 pixels)
+                width, height = img.size
+                current_pixels = width * height
+                
+                if current_pixels > 1000000:
+                    # Calculate scale factor to get to 1MP
+                    scale = math.sqrt(1000000 / current_pixels)
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    img = img.resize((new_width, new_height), Image.LANCZOS)
+                
+                # Save to buffer with NO compression for speed
                 buffer = io.BytesIO()
-                img.save(buffer, format="PNG", compress_level=self.compress_level)
+                img.save(buffer, format="PNG", compress_level=0)
                 buffer.seek(0)
                 
                 img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
@@ -191,7 +201,7 @@ class saturationNode:
                 if _check_and_clear_flag(uid, "skip"):
                     return {"result": (image,)}
                 
-                time.sleep(0.1)
+                time.sleep(0.5)
                 
             # Apply final effect after exiting loop
             result = _saturation_hsv(image, saturation)
