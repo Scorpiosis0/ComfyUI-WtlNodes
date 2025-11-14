@@ -34,8 +34,8 @@ from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
 from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
 from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
 
-from .image.ram_preview import NODE_CLASS_MAPPINGS as RAMP_NODES
-from .image.ram_preview import NODE_DISPLAY_NAME_MAPPINGS as RAMP_DISPLAY
+from .image.ram_preview_image import NODE_CLASS_MAPPINGS as RAMP_NODES
+from .image.ram_preview_image import NODE_DISPLAY_NAME_MAPPINGS as RAMP_DISPLAY
 
 # Combine all categories into the global mappings
 NODE_CLASS_MAPPINGS = {}

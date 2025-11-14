@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import time
 import threading
-from nodes import PreviewImage
+from ..helper.ram_preview import _send_ram_preview
 
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
@@ -49,7 +49,7 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-class DepthDOFNode(PreviewImage):
+class DepthDOFNode:
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -153,8 +153,12 @@ class DepthDOFNode(PreviewImage):
                     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
                     cur_mask = cv2.dilate(cur_mask, kernel, iterations=1)
                     cur_mask = cv2.erode(cur_mask, kernel, iterations=1)
+                    # Convert mask to torch tensor format [1, H, W, 3]
+                    # Stack to RGB (all channels same for grayscale visualization)
+                    mask_rgb = np.stack([cur_mask, cur_mask, cur_mask], axis=-1)
+                    mask_tensor = torch.from_numpy(mask_rgb).unsqueeze(0).float()
                     # Show a quick preview in the UI
-                    self._preview_mask(cur_mask, uid, prompt, extra_pnginfo)
+                    _send_ram_preview(mask_tensor, uid)
                     print(f"Sent Preview to def.")
 
                     # Check for button presses
@@ -202,27 +206,6 @@ class DepthDOFNode(PreviewImage):
         output_mask = torch.from_numpy(np.stack(masks)).float()
         print(f"[DOF] Effect applied – returning final image.")
         return (output_img, output_mask)
-
-    # -----------------------------------------------------------------
-    #  Helper that pushes a mask preview to the UI (unchanged)
-    # -----------------------------------------------------------------
-    def _preview_mask(self, mask, unique_id, prompt, extra_pnginfo):
-        """Preview the depth mask in real‑time."""
-        mask_rgb = np.stack([mask, mask, mask], axis=-1)
-        mask_tensor = torch.from_numpy(mask_rgb[np.newaxis, ...]).float()
-
-        try:
-            result = self.save_images(mask_tensor, filename_prefix="dof_preview_", prompt=prompt, extra_pnginfo=extra_pnginfo)
-
-            # Send preview to UI via websocket (ComfyUI internal API)
-            import server
-            print(f"Sent Preview to WebSocket.")
-
-            if hasattr(server.PromptServer, "instance"):
-                server.PromptServer.instance.send_sync("executed", {"node": unique_id, "output": {"images": result["ui"]["images"]}, "prompt_id": None})
-
-        except Exception as e:
-            print(f"[DOF] Preview error: {e}")
 
 # -----------------------------------------------------------------
 #  Node registration for ComfyUI (unchanged)

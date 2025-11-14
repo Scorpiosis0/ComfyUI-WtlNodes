@@ -5,12 +5,12 @@ app.registerExtension({
     
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         // Handle both RAMPreviewImage and saturationNode
-        if (nodeData.name === "RAMPreviewImage" || nodeData.name === "saturationNode") {
+        if (nodeData.name === "RAMPreviewImage" || nodeData.name === "saturationNode" || nodeData.name === "DepthDOFNode") {
             
             const onExecuted = nodeType.prototype.onExecuted;
             
             nodeType.prototype.onExecuted = function(message) {
-                
+
                 if (onExecuted) {
                     onExecuted.apply(this, arguments);
                 }
