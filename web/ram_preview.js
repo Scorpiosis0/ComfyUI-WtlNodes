@@ -4,7 +4,8 @@ app.registerExtension({
     name: "RAMPreview.ImageDisplay",
     
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name === "RAMPreviewImage") {
+        // Handle both RAMPreviewImage and saturationNode
+        if (nodeData.name === "RAMPreviewImage" || nodeData.name === "saturationNode") {
             
             const onExecuted = nodeType.prototype.onExecuted;
             

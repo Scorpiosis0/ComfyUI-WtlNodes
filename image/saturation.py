@@ -3,7 +3,10 @@ import cv2
 import numpy as np
 import time
 import threading
-from nodes import PreviewImage
+import base64
+import io
+from PIL import Image
+import server
 
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
@@ -103,7 +106,10 @@ def _saturation_hsv(image, saturation):
     cur_image = torch.clamp(cur_image, 0.0, 1.0)
     return(cur_image)
 
-class saturationNode(PreviewImage):
+class saturationNode:
+    def __init__(self):
+        self.compress_level = 4
+
     @classmethod
     def INPUT_TYPES(cls):
         return{
@@ -131,65 +137,69 @@ class saturationNode(PreviewImage):
     
     RETURN_TYPES=("IMAGE",)
     FUNCTION="saturation"
+    OUTPUT_NODE = True
     CATEGORY = "WtlNodes/image"
 
-    def saturation(self, image, saturation, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
-
-        # Clean any stale data for this node (mirrors old file‑cleanup)
+    def saturation(self, image, saturation, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None):
+        # Clean any stale data for this node
         if unique_id:
-            uid = str(unique_id)          # ensure consistent key type
+            uid = str(unique_id)
             _clear_all(uid)
 
         # Early‑out if the user pressed **Skip**
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
-            batch_size = image.shape[0]
-            return (image)
+            return {"result": (image,)}
 
-        # Convert tensors to numpy for the heavy lifting
-        batch_size = image.shape[0]
+        result = image
 
-        for b in range(batch_size):
-            cur_image = image[b:b+1]
-            # ---- preview loop (only when we have a UI node id) ---- #?
-            if unique_id is not None:
-                print(f"No unique ID exist!")
+        if unique_id and not auto_apply:
+            uid = str(unique_id)
+            while True:
+                # Grab the *latest* slider values sent by the UI
+                cur_saturation = _get_params(uid, saturation)
+                # Build a temporary image with those live values
+                cur_image = _saturation_hsv(image, cur_saturation)
+                
+                # Generate RAM preview and send via websocket
+                i = 255. * cur_image[0].cpu().numpy()
+                img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+                
+                buffer = io.BytesIO()
+                img.save(buffer, format="PNG", compress_level=self.compress_level)
+                buffer.seek(0)
+                
+                img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                
+                # Send preview via websocket WITHOUT returning
+                if hasattr(server.PromptServer, "instance"):
+                    server.PromptServer.instance.send_sync(
+                        "executed",
+                        {
+                            "node": uid,
+                            "output": {
+                                "ram_preview": [img_base64]
+                            },
+                            "prompt_id": None
+                        }
+                    )
 
-            if unique_id:
-                uid = str(unique_id)
-                while True & auto_apply == False:
-                    # Grab the *latest* slider values sent by the UI
-                    cur_saturation = _get_params(uid, saturation)
-                    # Build a temporary mask with those live values
-                    cur_image = _saturation_hsv(image, cur_saturation)
-                    # Show a quick preview in the UI
-                    self._preview_image(cur_image, uid, prompt, extra_pnginfo)
+                #  Check for button presses
+                if _check_and_clear_flag(uid, "apply"):
+                    saturation = cur_saturation
+                    break   # exit preview loop
 
-                    #  Check for button presses
-                    if _check_and_clear_flag(uid, "apply"):
-                        saturation = (cur_saturation)
-                        break   # exit preview loop
-
-                    if _check_and_clear_flag(uid, "skip"):
-                        return (image,)
-                    
-                    time.sleep(1)
-                # real effect
-                result = _saturation_hsv(image, saturation)
-            return (result,)
-    
-    # Helper that pushes a mask preview to the UI (unchanged)
-    def _preview_image(self, image, unique_id, prompt, extra_pnginfo):
-        """Preview the image in real‑time."""
-        try:
-            result = self.save_images(image, filename_prefix="sat_preview_", prompt=prompt, extra_pnginfo=extra_pnginfo,)
-
-            # Send preview to UI via websocket (ComfyUI internal API)
-            import server
-
-            if hasattr(server.PromptServer, "instance"):
-                server.PromptServer.instance.send_sync("executed", {"node": unique_id, "output": {"images": result["ui"]["images"]}, "prompt_id": None})
-        except Exception as e:
-            print(f"[SAT] Preview error: {e}")
+                if _check_and_clear_flag(uid, "skip"):
+                    return {"result": (image,)}
+                
+                time.sleep(0.1)
+                
+            # Apply final effect after exiting loop
+            result = _saturation_hsv(image, saturation)
+        else:
+            # Auto-apply mode
+            result = _saturation_hsv(image, saturation)
+                
+        return {"result": (result,)}
     
 NODE_CLASS_MAPPINGS = {"saturationNode": saturationNode}
 NODE_DISPLAY_NAME_MAPPINGS = {"saturationNode": "Saturation (HSV)"}
