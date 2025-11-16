@@ -26,10 +26,5 @@ class exposure:
 
         return(result,)
     
-NODE_CLASS_MAPPINGS = {
-    "Exposure": exposure
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Exposure": "Exposure"
-}
+NODE_CLASS_MAPPINGS = {"Exposure": exposure}
+NODE_DISPLAY_NAME_MAPPINGS = {"Exposure": "Exposure"}

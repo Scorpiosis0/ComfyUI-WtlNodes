@@ -9,11 +9,34 @@ class DualEaseCosineScheduler:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "steps": ("INT", {"default": 20, "min": 1, "max": 10000}),
-                "sigma_max": ("FLOAT", {"default": 14.6146, "min": 0.0, "max": 1000.0, "step": 0.01}),
-                "sigma_min": ("FLOAT", {"default": 0.0292, "min": 0.0, "max": 1000.0, "step": 0.01}),
-                "rho_start": ("FLOAT", {"default": 5.5, "min": 0.1, "max": 10.0, "step": 0.1}),
-                "rho_end": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 20.0, "step": 0.1}),
+                "steps": ("INT",{
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000
+                }),
+                "sigma_max": ("FLOAT",{
+                    "default": 14.6146,
+                    "min": 0.0, "max": 1000.0,
+                    "step": 0.01
+                }),
+                "sigma_min": ("FLOAT",{
+                    "default": 0.0292,
+                    "min": 0.0,
+                    "max": 1000.0,
+                    "step": 0.01
+                }),
+                "rho_start": ("FLOAT",{
+                    "default": 5.5,
+                    "min": 0.1,
+                    "max": 10.0,
+                    "step": 0.1
+                }),
+                "rho_end": ("FLOAT",{
+                    "default": 1.0,
+                    "min": 0.1,
+                    "max": 20.0,
+                    "step": 0.1
+                }),
             }
         }
     
@@ -128,12 +151,5 @@ class VisualizeSigmas:
             print(f"Plot error: {e}")
             return Image.new('RGB', (800, 600), color='white')
 
-NODE_CLASS_MAPPINGS = {
-    "DualEaseCosineScheduler": DualEaseCosineScheduler,
-    "VisualizeSigmas": VisualizeSigmas,
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "DualEaseCosineScheduler": "Dual Ease Cosine Scheduler",
-    "VisualizeSigmas": "Visualize Sigma Schedule",
-}
+NODE_CLASS_MAPPINGS = {"DualEaseCosineScheduler": DualEaseCosineScheduler}
+NODE_DISPLAY_NAME_MAPPINGS = {"DualEaseCosineScheduler": "Dual Ease Cosine Scheduler"}

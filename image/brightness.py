@@ -19,17 +19,12 @@ class brightness:
     FUNCTION="brightness"
     CATEGORY = "WtlNodes/image"
     
-    def brightness(self,image,brightness):
+    def brightness(self, image, brightness):
 
         result = image * (1+brightness/100)
         result = torch.clamp(result, 0.0, 1.0)
 
         return(result,)
     
-NODE_CLASS_MAPPINGS = {
-    "Brightness": brightness
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Brightness": "Brightness"
-}
+NODE_CLASS_MAPPINGS = {"Brightness": brightness}
+NODE_DISPLAY_NAME_MAPPINGS = {"Brightness": "Brightness"}

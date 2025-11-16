@@ -13,10 +13,7 @@ def _set_params(node_id: str, saturation: float) -> None:
         entry = _CONTROL_STORE.setdefault(node_id, {})
         entry["params"] = (saturation)
 
-def _get_params(
-    node_id: str,
-    saturation: float,
-) -> tuple[float]:
+def _get_params(node_id: str, saturation: float) -> tuple[float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
@@ -139,7 +136,6 @@ class saturationNode:
             uid = str(unique_id)
             _clear_all(uid)
 
-        # Early‑out if the user pressed **Skip**
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             return {"result": (image,)}
 
@@ -148,23 +144,21 @@ class saturationNode:
         if unique_id and not auto_apply:
             uid = str(unique_id)
             while True:
-                # Grab the *latest* slider values sent by the UI
+
                 cur_saturation = _get_params(uid, saturation)
-                # Build a temporary image with those live values
                 cur_image = _saturation_hsv(image, cur_saturation)
                 
-                # Send RAM preview
                 _send_ram_preview(cur_image, uid)
 
                 #  Check for button presses
                 if _check_and_clear_flag(uid, "apply"):
                     saturation = cur_saturation
-                    break   # exit preview loop
+                    break
 
                 if _check_and_clear_flag(uid, "skip"):
                     return {"result": (image,)}
                 
-                time.sleep(0.5)
+                time.sleep(0.25)
                 
             # Apply final effect after exiting loop
             result = _saturation_hsv(image, saturation)

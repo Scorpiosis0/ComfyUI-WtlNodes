@@ -1,76 +1,36 @@
-# -*- coding: utf-8 -*-
 # __init__.py  –  WtlNodes package entry point
-
-from .image.saturation import NODE_CLASS_MAPPINGS as SAT_NODES
-from .image.saturation import NODE_DISPLAY_NAME_MAPPINGS as SAT_DISPLAY
-
-from .image.brightness import NODE_CLASS_MAPPINGS as BRIGHT_NODES
-from .image.brightness import NODE_DISPLAY_NAME_MAPPINGS as BRIGHT_DISPLAY
-
-from .image.contrast import NODE_CLASS_MAPPINGS as CONT_NODES
-from .image.contrast import NODE_DISPLAY_NAME_MAPPINGS as CONT_DISPLAY
-
-from .image.exposure import NODE_CLASS_MAPPINGS as EXP_NODES
-from .image.exposure import NODE_DISPLAY_NAME_MAPPINGS as EXP_DISPLAY
-
-from .image.temperature import NODE_CLASS_MAPPINGS as TEMP_NODES
-from .image.temperature import NODE_DISPLAY_NAME_MAPPINGS as TEMP_DISPLAY
-
-from .image.depth_dof import NODE_CLASS_MAPPINGS as DDOF_NODES
-from .image.depth_dof import NODE_DISPLAY_NAME_MAPPINGS as DDOF_DISPLAY
-
-from .image.latentp import NODE_CLASS_MAPPINGS as LATA_NODES
-from .image.latentp import NODE_DISPLAY_NAME_MAPPINGS as LATA_DISPLAY
-
-from .image.image_trans import NODE_CLASS_MAPPINGS as IMGT_NODES
-from .image.image_trans import NODE_DISPLAY_NAME_MAPPINGS as IMGT_DISPLAY
-
-from .mask.mask_trans import NODE_CLASS_MAPPINGS as MASKT_NODES
-from .mask.mask_trans import NODE_DISPLAY_NAME_MAPPINGS as MASKT_DISPLAY
-
-from .mask.mask_processor import NODE_CLASS_MAPPINGS as MPROC_NODES
-from .mask.mask_processor import NODE_DISPLAY_NAME_MAPPINGS as MPROC_DISPLAY
-
-from .cosine_scheduler.custom_scheduler import NODE_CLASS_MAPPINGS as CSCH_NODES
-from .cosine_scheduler.custom_scheduler import NODE_DISPLAY_NAME_MAPPINGS as CSCH_DISPLAY
-
-from .image.ram_preview_image import NODE_CLASS_MAPPINGS as RAMP_NODES
-from .image.ram_preview_image import NODE_DISPLAY_NAME_MAPPINGS as RAMP_DISPLAY
-
-# Combine all categories into the global mappings
-NODE_CLASS_MAPPINGS = {}
-NODE_CLASS_MAPPINGS.update(SAT_NODES)
-NODE_CLASS_MAPPINGS.update(BRIGHT_NODES)
-NODE_CLASS_MAPPINGS.update(CONT_NODES)
-NODE_CLASS_MAPPINGS.update(EXP_NODES)
-NODE_CLASS_MAPPINGS.update(TEMP_NODES)
-NODE_CLASS_MAPPINGS.update(DDOF_NODES)
-NODE_CLASS_MAPPINGS.update(LATA_NODES)
-NODE_CLASS_MAPPINGS.update(IMGT_NODES)
-NODE_CLASS_MAPPINGS.update(MASKT_NODES)
-NODE_CLASS_MAPPINGS.update(MPROC_NODES)
-NODE_CLASS_MAPPINGS.update(CSCH_NODES)
-NODE_CLASS_MAPPINGS.update(RAMP_NODES)
-
-NODE_DISPLAY_NAME_MAPPINGS = {}
-NODE_DISPLAY_NAME_MAPPINGS.update(SAT_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(BRIGHT_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(CONT_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(EXP_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(TEMP_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(DDOF_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(LATA_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(IMGT_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(MASKT_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(MPROC_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(CSCH_DISPLAY)
-NODE_DISPLAY_NAME_MAPPINGS.update(RAMP_DISPLAY)
-
-# Aiohttp routes – now write to RAM instead of the filesystem
+import importlib
 import server
 from aiohttp import web
 
-# Create a registry for node handlers
+# Define submodules to import
+SUBMODULES = [
+    "image.saturation",
+    "image.brightness",
+    "image.contrast",
+    "image.exposure",
+    "image.temperature",
+    "image.depth_dof",
+    "image.latentp",
+    "image.image_trans",
+    "mask.mask_trans",
+    "mask.mask_processor",
+    "sigma.dual_ease_cosine_scheduler",
+    "sigma.sigma_visualizer",
+    "image.ram_preview_image",
+]
+
+# Initialize global mappings
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
+
+# Dynamically import and update the mappings
+for submodule in SUBMODULES:
+    module = importlib.import_module(f".{submodule}", package=__package__)
+    NODE_CLASS_MAPPINGS.update(getattr(module, "NODE_CLASS_MAPPINGS", {}))
+    NODE_DISPLAY_NAME_MAPPINGS.update(getattr(module, "NODE_DISPLAY_NAME_MAPPINGS", {}))
+
+# Create registry for node handlers
 NODE_HANDLERS = {
     "dof": {
         "module": ".image.depth_dof",
@@ -102,7 +62,7 @@ async def tgsz_params(request):
     from importlib import import_module
     module = import_module(handler["module"], package=__package__)
     
-    # Extract only the params this node type needs
+    # Extract only params this node type needs
     params = [data.get(k) for k in handler["params"]]
     module._set_params(node_id, *params)
     
@@ -129,11 +89,11 @@ async def tgsz_control(request):
     
     handler = NODE_HANDLERS[node_type]
     
-    # Dynamically import the module
+    # Dynamically import module
     from importlib import import_module
     module = import_module(handler["module"], package=__package__)
     
-    # Call _set_flag on the appropriate module
+    # Call _set_flag on appropriate module
     module._set_flag(node_id, action)
     
     print(f"[{node_type.upper()}] Flag '{action}' set for node {node_id}")

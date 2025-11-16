@@ -75,8 +75,7 @@ class MaskTransformNode:
     FUNCTION = "transform"
     CATEGORY = "mask/transform"
 
-    def transform(self, mask, resize_by, width, height, multiplier, interpolation, 
-                  fit_mode, rotate, translate_x, translate_y, zoom):
+    def transform(self, mask, resize_by, width, height, multiplier, interpolation, fit_mode, rotate, translate_x, translate_y, zoom):
         # Convert tensor to numpy
         mask_np = mask.cpu().numpy()
         batch_size = mask_np.shape[0]
@@ -116,8 +115,7 @@ class MaskTransformNode:
             target_h = max(1, target_h)
             
             # Step 5: Apply resize with fit mode
-            mask_uint8 = self._apply_resize(mask_uint8, target_w, target_h, 
-                                           fit_mode, interp_method)
+            mask_uint8 = self._apply_resize(mask_uint8, target_w, target_h, fit_mode, interp_method)
             
             # Convert back to float32
             mask_float = mask_uint8.astype(np.float32) / 255.0
@@ -170,9 +168,7 @@ class MaskTransformNode:
         rotation_matrix[1, 2] += (new_h / 2) - center[1]
         
         # Apply rotation
-        rotated = cv2.warpAffine(mask, rotation_matrix, (new_w, new_h),
-                                 flags=interp_method, borderMode=cv2.BORDER_CONSTANT,
-                                 borderValue=(0, 0, 0))
+        rotated = cv2.warpAffine(mask, rotation_matrix, (new_w, new_h), flags=interp_method, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
         
         return rotated
     
@@ -181,9 +177,7 @@ class MaskTransformNode:
         h, w = mask.shape[:2]
         translation_matrix = np.float32([[1, 0, tx], [0, 1, ty]])
         
-        translated = cv2.warpAffine(mask, translation_matrix, (w, h),
-                                    borderMode=cv2.BORDER_CONSTANT,
-                                    borderValue=(0, 0, 0))
+        translated = cv2.warpAffine(mask, translation_matrix, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
         return translated
     
     def _apply_resize(self, mask, target_w, target_h, fit_mode, interp_method):
@@ -242,50 +236,9 @@ class MaskTransformNode:
             start_y = (target_h - new_h) // 2
             
             result[start_y:start_y + new_h, start_x:start_x + new_w] = resized
-            
             return result
         
-        return mask
+        return (mask,)
 
-
-NODE_CLASS_MAPPINGS = {
-    "MaskTransformNode": MaskTransformNode
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "MaskTransformNode": "Mask Transform (Advanced)"
-}
-
-
-"""
-USAGE NOTES:
-
-1. RESIZE MODES:
-   - resize_by = False: Use absolute width/height values
-   - resize_by = True: Use multiplier (width/height hidden, needs dynamic UI)
-
-2. INTERPOLATION METHODS:
-   - nearest: Fast, pixelated look
-   - bilinear: Smooth, faster than bicubic
-   - bicubic: High quality, good balance
-   - lanczos: Highest quality, slower
-
-3. FIT MODES:
-   - crop: Maintains aspect ratio, crops excess (no black bars, may lose content)
-   - adjust: Stretches/squashes to fit (changes aspect ratio)
-   - fit: Maintains aspect ratio, adds black bars (letterboxing/pillarboxing)
-
-4. TRANSFORM ORDER:
-   Zoom → Rotation → Translation → Resize
-   This order provides the most intuitive results
-
-5. COORDINATES:
-   - translate_x: Positive moves right, negative moves left
-   - translate_y: Positive moves down, negative moves up
-   - rotate: Positive is clockwise, negative is counter-clockwise
-
-6. DYNAMIC UI:
-   When implementing dynamic behavior:
-   - Hide width/height when resize_by = True, show multiplier
-   - Hide multiplier when resize_by = False, show width/height
-"""
+NODE_CLASS_MAPPINGS = {"MaskTransformNode": MaskTransformNode}
+NODE_DISPLAY_NAME_MAPPINGS = {"MaskTransformNode": "Mask Transform (Advanced)"}

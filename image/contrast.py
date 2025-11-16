@@ -27,10 +27,5 @@ class contrast:
         
         return (result,)
     
-NODE_CLASS_MAPPINGS = {
-    "Contrast": contrast
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Contrast": "Contrast"
-}
+NODE_CLASS_MAPPINGS = {"Contrast": contrast}
+NODE_DISPLAY_NAME_MAPPINGS = {"Contrast": "Contrast"}

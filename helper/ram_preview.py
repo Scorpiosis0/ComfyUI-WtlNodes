@@ -16,9 +16,9 @@ def _send_ram_preview(image_tensor, unique_id):
         width, height = img.size
         current_pixels = width * height
         
-        if current_pixels > 1_000_000:
+        if current_pixels > 1000000:
             # Calculate scale factor to get to 1MP
-            scale = math.sqrt(1_000_000 / current_pixels)
+            scale = math.sqrt(1000000 / current_pixels)
             new_width = int(width * scale)
             new_height = int(height * scale)
             img = img.resize((new_width, new_height), Image.LANCZOS)

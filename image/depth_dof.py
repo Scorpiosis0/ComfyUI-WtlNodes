@@ -14,12 +14,7 @@ def _set_params(node_id: str, focus: float, rng: float, edge: int) -> None:
         entry = _CONTROL_STORE.setdefault(node_id, {})
         entry["params"] = (focus, rng, edge)
 
-def _get_params(
-    node_id: str,
-    default_focus: float,
-    default_range: float,
-    default_edge: int,
-) -> tuple[float, float, int]:
+def _get_params(node_id: str, default_focus: float, default_range: float, default_edge: int) -> tuple[float, float, int]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
@@ -104,14 +99,12 @@ class DepthDOFNode:
 
     def __init__(self):
         super().__init__()
-        # No on‑disk directory needed any more.
 
-    # Core processing – only the preview‑loop part talks to the RAM store.
     def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
         # Clean any stale data for this node (mirrors old file‑cleanup)
         if unique_id:
-            uid = str(unique_id)          # ensure consistent key type
+            uid = str(unique_id)
             _clear_all(uid)
 
         # Early‑out if the user pressed **Skip**
@@ -129,17 +122,15 @@ class DepthDOFNode:
         masks = []
 
         for b in range(batch_size):
-            # image / depth preparation (identical to original)
             img = img_np[b]
             depth = depth_np[b]
 
-            if depth.shape[-1] > 1:               # make depth single‑channel
+            if depth.shape[-1] > 1:
                 depth = np.mean(depth, axis=-1, keepdims=True)
 
             # Normalise depth to 0‑1
             depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
 
-            # preview loop (only when we have a UI node id)
             if unique_id:
                 uid = str(unique_id)
                 while True & auto_apply == False:
@@ -153,32 +144,30 @@ class DepthDOFNode:
                     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
                     cur_mask = cv2.dilate(cur_mask, kernel, iterations=1)
                     cur_mask = cv2.erode(cur_mask, kernel, iterations=1)
+
                     # Convert mask to torch tensor format [1, H, W, 3]
                     # Stack to RGB (all channels same for grayscale visualization)
                     mask_rgb = np.stack([cur_mask, cur_mask, cur_mask], axis=-1)
                     mask_tensor = torch.from_numpy(mask_rgb).unsqueeze(0).float()
+
                     # Show a quick preview in the UI
                     _send_ram_preview(mask_tensor, uid)
-                    print(f"Sent Preview to def.")
 
                     # Check for button presses
                     if _check_and_clear_flag(uid, "apply"):
-                        print(f"[DOF] **Apply** pressed for node {uid}.")
                         focus_depth, focus_range, edge_fix = (cur_focus, cur_range, cur_edge)
-                        blur_mask = cur_mask          # final mask for this batch
-                        break   # exit preview loop
+                        blur_mask = cur_mask
+                        break
 
                     if _check_and_clear_flag(uid, "skip"):
-                        print(f"[DOF] **Skip** pressed for node {uid}.")
                         empty_mask = torch.zeros(
                             (batch_size, image.shape[1], image.shape[2])
                         )
                         return (image, empty_mask)
 
-                    # Throttle the loop a little so we don’t hammer the CPU
-                    time.sleep(1)
+                    time.sleep(0.25)
 
-            # ---- real effect (unchanged) -----------------------------
+            # Real effect
             img_uint8 = (img * 255).astype(np.uint8)
 
             # Compute a Gaussian kernel size from the blur strength
@@ -199,16 +188,11 @@ class DepthDOFNode:
             results.append(result)
             masks.append(blur_mask)
 
-        # -------------------------------------------------------------
-        #  4️⃣  Convert back to torch tensors and return
-        # -------------------------------------------------------------
+        # Convert back to torch tensors and return
         output_img  = torch.from_numpy(np.stack(results)).float()
         output_mask = torch.from_numpy(np.stack(masks)).float()
         print(f"[DOF] Effect applied – returning final image.")
         return (output_img, output_mask)
 
-# -----------------------------------------------------------------
-#  Node registration for ComfyUI (unchanged)
-# -----------------------------------------------------------------
 NODE_CLASS_MAPPINGS = {"DepthDOFNode": DepthDOFNode}
 NODE_DISPLAY_NAME_MAPPINGS = {"DepthDOFNode": "Depth of Field (DOF)"}

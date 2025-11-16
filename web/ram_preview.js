@@ -4,7 +4,6 @@ app.registerExtension({
     name: "RAMPreview.ImageDisplay",
     
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        // Handle both RAMPreviewImage and saturationNode
         if (nodeData.name === "RAMPreviewImage" || nodeData.name === "saturationNode" || nodeData.name === "DepthDOFNode") {
             
             const onExecuted = nodeType.prototype.onExecuted;
@@ -16,15 +15,13 @@ app.registerExtension({
                 }
                 
                 if (message?.ram_preview) {
-                    // Store images but don't render them ourselves
+                    // Store images
                     this.imgs = [];
                     
                     // Create image elements (ComfyUI will handle display)
                     message.ram_preview.forEach((base64Data, index) => {
-                        const startTime = Date.now();
                         const img = new Image();
-                        img.onload = () => {
-                        };
+                        img.onload = () => {};
                         img.src = `data:image/png;base64,${base64Data}`;
                         this.imgs.push(img);
                     });                    

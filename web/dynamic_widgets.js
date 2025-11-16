@@ -2,10 +2,10 @@ import { app } from "../../scripts/app.js";
 
 const HIDDEN_TAG = "tgszhidden";
 
-// Find widget by name
+// Helper
+
 const findWidgetByName = (node, name) => node.widgets?.find((w) => w.name === name);
 
-// Toggle widget visibility - copied from smZNodes method
 export function toggleWidget(node, widget, force) {
     if (!widget) return;
     
@@ -38,8 +38,9 @@ export function toggleWidget(node, widget, force) {
         delete widget.computedHeight;
 }
 
-// Apply widget logic for AdvancedEmptyLatent node
+//Widget logic
 function setupEmptyLatentLogic(node) {
+
     const useRatioWidget = findWidgetByName(node, "use_ratio");
     const widthWidget = findWidgetByName(node, "width");
     const heightWidget = findWidgetByName(node, "height");
@@ -83,7 +84,6 @@ function setupEmptyLatentLogic(node) {
     const updateVisibility = () => {
         const useRatio = useRatioWidget.value;
         
-        // FIXED: Inverted the logic
         toggleWidget(node, widthWidget, useRatio);
         toggleWidget(node, heightWidget, useRatio);
         toggleWidget(node, ratioWidget, !useRatio);
@@ -125,9 +125,8 @@ function setupEmptyLatentLogic(node) {
     });
 }
 
-// Setup controls for DOF node
 function setupDOFControls(node) {
-    // Find the slider widgets
+
     const focusDepthWidget = findWidgetByName(node, "focus_depth");
     const focusRangeWidget = findWidgetByName(node, "focus_range");
     const edgeFixWidget = findWidgetByName(node, "edge_fix");
@@ -203,9 +202,8 @@ function setupDOFControls(node) {
     }, { serialize: false });
 }
 
-// Setup controls for Saturation node
 function setupSaturationControls(node) {
-    // Find the slider widgets
+
     const saturationWidget = findWidgetByName(node, "saturation");
 
     
@@ -262,7 +260,6 @@ function setupSaturationControls(node) {
     }, { serialize: false });
 }
 
-// Apply widget logic for ImageTransform node
 function setupImageTransformLogic(node) {
     const resizeByWidget = findWidgetByName(node, "resize_by");
     const widthWidget = findWidgetByName(node, "width");
@@ -274,7 +271,6 @@ function setupImageTransformLogic(node) {
     const updateVisibility = () => {
         const resizeBy = resizeByWidget.value;
         
-        // FIXED: Inverted the logic
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
@@ -285,7 +281,7 @@ function setupImageTransformLogic(node) {
     // Initial setup
     updateVisibility();
     
-    // Watch for changes using property descriptor - smZNodes style
+    // Watch for changes using property descriptor
     let val = resizeByWidget.value;
     Object.defineProperty(resizeByWidget, 'value', {
         get() {
@@ -300,7 +296,6 @@ function setupImageTransformLogic(node) {
     });
 }
 
-// Apply widget logic for MaskTransform node
 function setupMaskTransformLogic(node) {
     const resizeByWidget = findWidgetByName(node, "resize_by");
     const widthWidget = findWidgetByName(node, "width");
@@ -312,7 +307,6 @@ function setupMaskTransformLogic(node) {
     const updateVisibility = () => {
         const resizeBy = resizeByWidget.value;
         
-        // FIXED: Inverted the logic
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
@@ -323,7 +317,7 @@ function setupMaskTransformLogic(node) {
     // Initial setup
     updateVisibility();
     
-    // Watch for changes using property descriptor - smZNodes style
+    // Watch for changes using property descriptor
     let val = resizeByWidget.value;
     Object.defineProperty(resizeByWidget, 'value', {
         get() {
@@ -338,7 +332,7 @@ function setupMaskTransformLogic(node) {
     });
 }
 
-// Register extension
+// Register
 app.registerExtension({
     name: "Comfy.TgszNodes.DynamicWidgets",
     

@@ -1,5 +1,4 @@
 import torch
-import math
 
 class temperature:
     @classmethod
@@ -8,9 +7,9 @@ class temperature:
             "required": {
                 "image": ("IMAGE",),
                 "kelvin": ("INT", {
-                    "default": 6500,    # Standard daylight
-                    "min": 1000,        # Candle flame
-                    "max": 12000,       # Clear blue sky
+                    "default": 6500,
+                    "min": 1000,
+                    "max": 12000,
                     "step": 100,
                 })
             }
@@ -26,12 +25,5 @@ class temperature:
         
         return (result,)
 
-
-# Register the node with ComfyUI
-NODE_CLASS_MAPPINGS = {
-    "Temperature": temperature
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "Temperature": "Color Temperature"
-}
+NODE_CLASS_MAPPINGS = {"Temperature": temperature}
+NODE_DISPLAY_NAME_MAPPINGS = {"Temperature": "Color Temperature"}
