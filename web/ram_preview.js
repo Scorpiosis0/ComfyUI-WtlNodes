@@ -4,7 +4,13 @@ app.registerExtension({
     name: "RAMPreview.ImageDisplay",
     
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name === "RAMPreviewImage" || nodeData.name === "saturationNode" || nodeData.name === "DepthDOFNode") {
+        if (nodeData.name === "RAMPreviewImage" ||
+            nodeData.name === "saturationNode" ||
+            nodeData.name === "DepthDOFNode" ||
+            nodeData.name === "Exposure" ||
+            nodeData.name === "Contrast" ||
+            nodeData.name === "Brightness"
+        ) {
             
             const onExecuted = nodeType.prototype.onExecuted;
             

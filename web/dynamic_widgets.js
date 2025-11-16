@@ -206,7 +206,6 @@ function setupSaturationControls(node) {
 
     const saturationWidget = findWidgetByName(node, "saturation");
 
-    
     // Function to send updated parameters to Python
     const sendParams = () => {
         if (!saturationWidget) return;
@@ -254,6 +253,177 @@ function setupSaturationControls(node) {
             body: JSON.stringify({
                 node_id: node.id,
                 node_type: 'sat',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+}
+
+function setupExposureControls(node) {
+
+    const exposureWidget = findWidgetByName(node, "exposure");
+
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!exposureWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'exp',
+                exposure: exposureWidget.value,
+            })
+        });
+    };
+    
+    // Watch for slider changes and send updated params
+    if (exposureWidget) {
+        const origCallback = exposureWidget.callback;
+        exposureWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'exp',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'exp',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+}
+
+function setupContrastControls(node) {
+
+    const contrastWidget = findWidgetByName(node, "contrast");
+
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!contrastWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'con',
+                contrast: contrastWidget.value,
+            })
+        });
+    };
+    
+    // Watch for slider changes and send updated params
+    if (contrastWidget) {
+        const origCallback = contrastWidget.callback;
+        contrastWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'con',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'con',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+}
+
+function setupBrightnessControls(node) {
+
+    const brightnessWidget = findWidgetByName(node, "brightness");
+
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!brightnessWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'bri',
+                brightness: brightnessWidget.value,
+            })
+        });
+    };
+    
+    // Watch for slider changes and send updated params
+    if (brightnessWidget) {
+        const origCallback = brightnessWidget.callback;
+        brightnessWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'bri',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'bri',
                 action: 'skip'
             })
         });
@@ -339,11 +509,7 @@ app.registerExtension({
     async init() {
         // Add CSS for hiding widgets
         const style = document.createElement("style");
-        style.textContent = `
-            .${HIDDEN_TAG} {
-                display: none !important;
-            }
-        `;
+        style.textContent = `.${HIDDEN_TAG} {display: none !important;}`;
         document.head.appendChild(style);
     },
     
@@ -366,6 +532,15 @@ app.registerExtension({
                 break;
             case "saturationNode":
                 setupSaturationControls(node);
+                break;
+            case "Exposure":
+                setupExposureControls(node);
+                break;
+            case "Contrast":
+                setupContrastControls(node);
+                break;
+            case "Brightness":
+                setupBrightnessControls(node);
                 break;
         }
     }

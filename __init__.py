@@ -39,6 +39,18 @@ NODE_HANDLERS = {
     "sat": {
         "module": ".image.saturation",
         "params": ["saturation"]
+    },
+    "exp": {
+        "module": ".image.exposure",
+        "params": ["exposure"]
+    },
+    "con": {
+        "module": ".image.contrast",
+        "params": ["contrast"]
+    },
+    "bri": {
+        "module": ".image.brightness",
+        "params": ["brightness"]
     }
 }
 
