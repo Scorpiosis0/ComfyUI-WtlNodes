@@ -1,7 +1,8 @@
-import torch
 import numpy as np
 from io import BytesIO
 from PIL import Image
+import hashlib
+import time
 
 # Visualizer node
 class VisualizeSigmas:
@@ -26,7 +27,12 @@ class VisualizeSigmas:
         import os
         
         output_dir = folder_paths.get_temp_directory()
-        filename = "sigma_viz.png"
+        
+        # Create unique filename using hash of sigmas + timestamp
+        sigma_hash = hashlib.md5(sigmas_np.tobytes()).hexdigest()[:8]
+        timestamp = str(int(time.time() * 1000000))  # microsecond precision
+        filename = f"sigma_viz_{sigma_hash}_{timestamp}.png"
+        
         file_path = os.path.join(output_dir, filename)
         img.save(file_path)
         
@@ -38,7 +44,9 @@ class VisualizeSigmas:
             matplotlib.use('Agg')
             import matplotlib.pyplot as plt
             
-            fig, ax = plt.subplots(figsize=(10, 6), dpi=100)
+            # Create a new figure with explicit close to avoid state pollution
+            fig = plt.figure(figsize=(10, 6), dpi=100)
+            ax = fig.add_subplot(111)
             
             steps = list(range(len(sigmas)))
             ax.plot(steps, sigmas, 'b-', linewidth=3)
@@ -73,12 +81,20 @@ class VisualizeSigmas:
             plt.savefig(buffer, format='png', bbox_inches='tight')
             buffer.seek(0)
             img = Image.open(buffer).convert('RGB')
+            
+            # Explicitly close to free resources and avoid state pollution
             plt.close(fig)
+            buffer.close()
             
             return img
         except Exception as e:
             print(f"Plot error: {e}")
+            # Clean up on error
+            try:
+                plt.close('all')
+            except:
+                pass
             return Image.new('RGB', (800, 600), color='white')
 
-NODENODE_CLASS_MAPPINGS = {"VisualizeSigmas": VisualizeSigmas}
+NODE_CLASS_MAPPINGS = {"VisualizeSigmas": VisualizeSigmas}
 NODE_DISPLAY_NAME_MAPPINGS = {"VisualizeSigmas": "Visualize Sigma Schedule"}

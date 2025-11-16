@@ -5,7 +5,7 @@ from PIL import Image
 
 class RAMPreviewImage:
     def __init__(self):
-        self.compress_level = 4
+        self.compress_level = 0
 
     @classmethod
     def INPUT_TYPES(s):
