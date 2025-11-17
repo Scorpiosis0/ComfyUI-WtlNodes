@@ -4,6 +4,32 @@ const HIDDEN_TAG = "tgszhidden";
 
 // Helper
 
+function setupNodeRemovalHandler(node, nodeTypeKey) {
+    const originalOnRemoved = node.onRemoved;
+    
+    node.onRemoved = function() {
+        console.log(`[${node.comfyClass}] Node ${this.id} being removed, sending skip signal`);
+        
+        // Send skip signal to Python backend
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: this.id,
+                node_type: nodeTypeKey,
+                action: 'skip'
+            })
+        }).catch(err => {
+            console.error(`Failed to send skip signal for node ${this.id}:`, err);
+        });
+        
+        // Call original onRemoved if it exists
+        if (originalOnRemoved) {
+            originalOnRemoved.apply(this, arguments);
+        }
+    };
+}
+
 const findWidgetByName = (node, name) => node.widgets?.find((w) => w.name === name);
 
 export function toggleWidget(node, widget, force) {
@@ -200,6 +226,8 @@ function setupDOFControls(node) {
             })
         });
     }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'dof');
 }
 
 function setupSaturationControls(node) {
@@ -257,6 +285,8 @@ function setupSaturationControls(node) {
             })
         });
     }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'sat');
 }
 
 function setupExposureControls(node) {
@@ -314,6 +344,8 @@ function setupExposureControls(node) {
             })
         });
     }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'exp');
 }
 
 function setupContrastControls(node) {
@@ -371,6 +403,8 @@ function setupContrastControls(node) {
             })
         });
     }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'con');
 }
 
 function setupBrightnessControls(node) {
@@ -428,6 +462,8 @@ function setupBrightnessControls(node) {
             })
         });
     }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'bri');
 }
 
 function setupImageTransformLogic(node) {
@@ -529,18 +565,23 @@ app.registerExtension({
                 break;
             case "DepthDOFNode":
                 setupDOFControls(node);
+                setupNodeRemovalHandler(node, "dof");
                 break;
             case "saturationNode":
                 setupSaturationControls(node);
+                setupNodeRemovalHandler(node, "sat");
                 break;
             case "Exposure":
                 setupExposureControls(node);
+                setupNodeRemovalHandler(node, "exp");
                 break;
             case "Contrast":
                 setupContrastControls(node);
+                setupNodeRemovalHandler(node, "con");
                 break;
             case "Brightness":
                 setupBrightnessControls(node);
+                setupNodeRemovalHandler(node, "bri");
                 break;
         }
     }
