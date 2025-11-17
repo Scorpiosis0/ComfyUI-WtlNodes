@@ -18,7 +18,7 @@ class RAMPreviewImage:
     RETURN_TYPES = ()
     FUNCTION = "preview_images"
     OUTPUT_NODE = True
-    CATEGORY = "image"
+    CATEGORY = "WtlNodes/experimental"
     DESCRIPTION = "Previews images using RAM storage only (no disk I/O)."
 
     def preview_images(self, images):

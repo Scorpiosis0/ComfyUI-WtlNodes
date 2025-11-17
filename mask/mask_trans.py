@@ -73,7 +73,7 @@ class MaskTransformNode:
     
     RETURN_TYPES = ("MASK",)
     FUNCTION = "transform"
-    CATEGORY = "mask/transform"
+    CATEGORY = "WtlNodes/mask"
 
     def transform(self, mask, resize_by, width, height, multiplier, interpolation, fit_mode, rotate, translate_x, translate_y, zoom):
         # Convert tensor to numpy

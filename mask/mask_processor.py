@@ -26,7 +26,7 @@ class MaskProcessor:
     
     RETURN_TYPES = ("MASK",)
     FUNCTION = "process_mask"
-    CATEGORY = "mask"
+    CATEGORY = "WtlNodes/mask"
 
     def process_mask(self, mask, dilate_erode, feather):
         # Convert tensor to numpy

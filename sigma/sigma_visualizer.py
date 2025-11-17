@@ -17,7 +17,7 @@ class VisualizeSigmas:
     RETURN_TYPES = ()
     OUTPUT_NODE = True
     FUNCTION = "visualize"
-    CATEGORY = "sampling/custom"
+    CATEGORY = "WtlNodes/sigma"
 
     def visualize(self, sigmas):
         sigmas_np = sigmas.cpu().numpy() if hasattr(sigmas, 'cpu') else np.array(sigmas)

@@ -104,7 +104,7 @@ class AdvancedEmptyLatent:
     RETURN_TYPES = ("LATENT", "INT", "INT", "INT", "INT")
     RETURN_NAMES = ("Latent", "Latent Width", "Latent Height", "Width", "Height")
     FUNCTION = "generate"
-    CATEGORY = "latent"
+    CATEGORY = "WtlNodes/latent"
 
     def generate(self, use_ratio, portrait_landscape, width, height, ratio, resolution, batch_size):
         if use_ratio:

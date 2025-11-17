@@ -40,7 +40,7 @@ class DualEaseCosineScheduler:
     
     RETURN_TYPES = ("SIGMAS",)
     FUNCTION = "get_sigmas"
-    CATEGORY = "sampling/custom"
+    CATEGORY = "WtlNodes/sigma"
 
     def get_sigmas(self, steps, sigma_max, sigma_min, rho_start, rho_end):
         # x from 0 to 1 - use steps not steps+1, then append zero

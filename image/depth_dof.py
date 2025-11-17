@@ -95,7 +95,7 @@ class DepthDOFNode:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "blur_mask")
     FUNCTION = "apply_dof"
-    CATEGORY = "image/effects"
+    CATEGORY = "WtlNodes/image"
 
     def __init__(self):
         super().__init__()

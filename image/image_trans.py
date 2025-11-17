@@ -73,7 +73,7 @@ class ImageTransformNode:
     
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "transform"
-    CATEGORY = "image/transform"
+    CATEGORY = "WtlNodes/image"
 
     def transform(self, image, resize_by, width, height, multiplier, interpolation, fit_mode, rotate, translate_x, translate_y, zoom):
         # Convert tensor to numpy
