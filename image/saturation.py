@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 import time
 import threading
 from ..helper.ram_preview import _send_ram_preview
