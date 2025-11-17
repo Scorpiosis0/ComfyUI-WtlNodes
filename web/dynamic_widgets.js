@@ -156,10 +156,11 @@ function setupDOFControls(node) {
     const focusDepthWidget = findWidgetByName(node, "focus_depth");
     const focusRangeWidget = findWidgetByName(node, "focus_range");
     const edgeFixWidget = findWidgetByName(node, "edge_fix");
+    const hardFocusRangeWidget = findWidgetByName(node, "hard_focus_range");
     
     // Function to send updated parameters to Python
     const sendParams = () => {
-        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget) return;
+        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -169,7 +170,8 @@ function setupDOFControls(node) {
                 node_type: 'dof',
                 focus_depth: focusDepthWidget.value,
                 focus_range: focusRangeWidget.value,
-                edge_fix: edgeFixWidget.value
+                edge_fix: edgeFixWidget.value,
+                hard_focus_range : hardFocusRangeWidget.value
             })
         });
     };
@@ -194,6 +196,14 @@ function setupDOFControls(node) {
     if (edgeFixWidget) {
         const origCallback = edgeFixWidget.callback;
         edgeFixWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+
+    if (hardFocusRangeWidget) {
+        const origCallback = hardFocusRangeWidget.callback;
+        hardFocusRangeWidget.callback = function(value) {
             sendParams();
             if (origCallback) origCallback.call(this, value);
         };

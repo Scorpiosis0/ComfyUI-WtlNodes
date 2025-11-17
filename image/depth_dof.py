@@ -8,17 +8,17 @@ from ..helper.ram_preview import _send_ram_preview
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
 
-def _set_params(node_id: str, focus: float, rng: float, edge: int) -> None:
+def _set_params(node_id: str, focus: float, rng: float, edge: int, hard_focus: float) -> None:
     """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (focus, rng, edge)
+        entry["params"] = (focus, rng, edge, hard_focus)
 
-def _get_params(node_id: str, default_focus: float, default_range: float, default_edge: int) -> tuple[float, float, int]:
+def _get_params(node_id: str, default_focus: float, default_range: float, default_edge: int, default_hard_focus: float) -> tuple[float, float, int, float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (default_focus, default_range, default_edge))
+        return entry.get("params", (default_focus, default_range, default_edge, default_hard_focus))
 
 def _set_flag(node_id: str, flag: str) -> None:
     """Mark a button press – ``flag`` must be ``'apply'`` or ``'skip'``."""
@@ -66,9 +66,16 @@ class DepthDOFNode:
                     "step": 1.0,
                     "round": 0.1,
                 }),
+                "hard_focus_range": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 0.5,
+                    "step": 0.01,
+                    "round": 0.01,
+                }),
                 "focus_range": ("FLOAT", {
                     "default": 0.25,
-                    "min": 0.01,
+                    "min": 0.0,
                     "max": 1.0,
                     "step": 0.01,
                     "round": 0.01,
@@ -100,7 +107,7 @@ class DepthDOFNode:
     def __init__(self):
         super().__init__()
 
-    def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, edge_fix, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
+    def apply_dof(self, image, depth_map, focus_depth, blur_strength, focus_range, hard_focus_range, edge_fix, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None,):
 
         # Clean any stale data for this node (mirrors old file‑cleanup)
         if unique_id:
@@ -133,13 +140,33 @@ class DepthDOFNode:
 
             if unique_id:
                 uid = str(unique_id)
-                while True & auto_apply == False:
+                while True:
                     # Grab the *latest* slider values sent by the UI
-                    cur_focus, cur_range, cur_edge = _get_params(uid, focus_depth, focus_range, edge_fix)
+                    cur_focus, cur_range, cur_edge, cur_hard_range = _get_params(uid, focus_depth, focus_range, edge_fix, hard_focus_range)
 
-                    # Build a temporary mask with those live values
-                    cur_mask = np.abs(depth - cur_focus)
-                    cur_mask = np.clip(cur_mask / cur_range, 0, 1).squeeze()
+                    # Build a temporary mask with hard focus range
+                    # Calculate distance from focus point
+                    distance_from_focus = np.abs(depth - cur_focus)
+                    
+                    # Create hard focus zone (0 blur within this range)
+                    hard_zone_min = cur_focus - cur_hard_range
+                    hard_zone_max = cur_focus + cur_hard_range
+                    
+                    # Calculate mask: inside hard zone = 0, outside = gradual increase
+                    cur_mask = np.zeros_like(distance_from_focus)
+                    
+                    # For depths below hard zone
+                    below_mask = depth < hard_zone_min
+                    cur_mask[below_mask] = (hard_zone_min - depth[below_mask]) / cur_range
+                    
+                    # For depths above hard zone
+                    above_mask = depth > hard_zone_max
+                    cur_mask[above_mask] = (depth[above_mask] - hard_zone_max) / cur_range
+                    
+                    # Clip to 0-1 range
+                    cur_mask = np.clip(cur_mask, 0, 1).squeeze()
+                    
+                    # Edge Fix
                     kernel_size = abs(cur_edge) * 2 + 1
                     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
                     cur_mask = cv2.dilate(cur_mask, kernel, iterations=1)
@@ -154,8 +181,8 @@ class DepthDOFNode:
                     _send_ram_preview(mask_tensor, uid)
 
                     # Check for button presses
-                    if _check_and_clear_flag(uid, "apply"):
-                        focus_depth, focus_range, edge_fix = (cur_focus, cur_range, cur_edge)
+                    if _check_and_clear_flag(uid, "apply") or auto_apply:
+                        focus_depth, focus_range, edge_fix, hard_focus_range = (cur_focus, cur_range, cur_edge, cur_hard_range)
                         blur_mask = cur_mask
                         break
 
