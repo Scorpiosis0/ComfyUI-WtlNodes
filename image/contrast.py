@@ -10,13 +10,13 @@ def _set_params(node_id: str, contrast: float) -> None:
     """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (contrast)
+        entry["params"] = (contrast,)
 
 def _get_params(node_id: str, contrast: float) -> tuple[float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (contrast))
+        return entry.get("params", (contrast,))
 
 def _set_flag(node_id: str, flag: str) -> None:
     """Mark a button press – ``flag`` must be ``'apply'`` or ``'skip'``."""
@@ -60,6 +60,11 @@ class contrast:
                     "label_on": "On",
                     "label_off": "Off"
                 }),
+                "apply_all": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "On",
+                    "label_off": "Off"
+                }),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -70,7 +75,7 @@ class contrast:
     FUNCTION="contrast"
     CATEGORY = "WtlNodes/image"
     
-    def contrast(self, image, contrast, auto_apply, unique_id=None):
+    def contrast(self, image, contrast, auto_apply, apply_all, unique_id=None):
 
         # Clean any stale data for this node
         if unique_id:
@@ -82,32 +87,72 @@ class contrast:
         
         if unique_id and not auto_apply:
             uid = str(unique_id)
-            while True:
+            
+            if apply_all:
+                # Process all images at once (original behavior)
+                while True:
+                    cur_contrast = _get_params(uid, contrast)[0]
+                    pivot = 0.5
+                    cur_image = pivot + (image - pivot) * (1 + cur_contrast / 100)
+                    cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                    _send_ram_preview(cur_image, uid)
 
-                cur_contrast = _get_params(uid, contrast)
+                    # Check for button presses
+                    if _check_and_clear_flag(uid, "apply"):
+                        contrast = cur_contrast
+                        break
+
+                    if _check_and_clear_flag(uid, "skip"):
+                        return {"result": (image,)}
+                    
+                    time.sleep(0.25)
+                
+                # Apply final effect after exiting loop
                 pivot = 0.5
-                cur_image = pivot + (image - pivot) * (1+cur_contrast/100)
-                cur_image = torch.clamp(cur_image, 0.0, 1.0)
-                _send_ram_preview(cur_image, uid)
-
-                #  Check for button presses
-                if _check_and_clear_flag(uid, "apply"):
-                    contrast = cur_contrast
-                    break
-
-                if _check_and_clear_flag(uid, "skip"):
-                    return {"result": (image,)}
+                result = pivot + (image - pivot) * (1 + contrast / 100)
+                result = torch.clamp(result, 0.0, 1.0)
+            
+            else:
+                # Process images one by one
+                batch_size = image.shape[0]
+                result_list = []
                 
-                time.sleep(0.25)
+                for i in range(batch_size):
+                    single_image = image[i:i+1]  # Keep batch dimension
+                    
+                    while True:
+                        cur_contrast = _get_params(uid, contrast)[0]
+                        pivot = 0.5
+                        cur_image = pivot + (single_image - pivot) * (1 + cur_contrast / 100)
+                        cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                        _send_ram_preview(cur_image, uid)
+
+                        # Check for button presses
+                        if _check_and_clear_flag(uid, "apply"):
+                            final_contrast = cur_contrast
+                            break
+
+                        if _check_and_clear_flag(uid, "skip"):
+                            # Skip this image, use original
+                            result_list.append(single_image)
+                            final_contrast = None
+                            break
+                        
+                        time.sleep(0.25)
+                    
+                    # Apply final effect for this image if not skipped
+                    if final_contrast is not None:
+                        pivot = 0.5
+                        processed = pivot + (single_image - pivot) * (1 + final_contrast / 100)
+                        processed = torch.clamp(processed, 0.0, 1.0)
+                        result_list.append(processed)
                 
-            # Apply final effect after exiting loop
-            pivot = 0.5
-            result = pivot + (image - pivot) * (1+contrast/100)
-            result = torch.clamp(result, 0.0, 1.0)
+                # Concatenate all processed images back into a batch
+                result = torch.cat(result_list, dim=0)
         else:
-            # Auto-apply mode
+            # Auto-apply mode (always processes all images the same way)
             pivot = 0.5
-            result = pivot + (image - pivot) * (1+contrast/100)
+            result = pivot + (image - pivot) * (1 + contrast / 100)
             result = torch.clamp(result, 0.0, 1.0)
                 
         return {"result": (result,)}

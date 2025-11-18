@@ -10,13 +10,13 @@ def _set_params(node_id: str, exposure: float) -> None:
     """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (exposure)
+        entry["params"] = (exposure,)
 
 def _get_params(node_id: str, exposure: float) -> tuple[float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (exposure))
+        return entry.get("params", (exposure,))
 
 def _set_flag(node_id: str, flag: str) -> None:
     """Mark a button press – ``flag`` must be ``'apply'`` or ``'skip'``."""
@@ -60,6 +60,11 @@ class exposure:
                     "label_on": "On",
                     "label_off": "Off"
                 }),
+                "apply_all": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "On",
+                    "label_off": "Off"
+                }),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -70,7 +75,7 @@ class exposure:
     FUNCTION="exposure"
     CATEGORY = "WtlNodes/image"
     
-    def exposure(self, image, exposure, auto_apply, unique_id=None):
+    def exposure(self, image, exposure, auto_apply, apply_all, unique_id=None):
 
         # Clean any stale data for this node
         if unique_id:
@@ -82,28 +87,66 @@ class exposure:
         
         if unique_id and not auto_apply:
             uid = str(unique_id)
-            while True:
 
-                cur_exposure = _get_params(uid, exposure)
-                cur_image = image * (2**(cur_exposure))
-                cur_image = torch.clamp(cur_image, 0.0, 1.0)
-                _send_ram_preview(cur_image, uid)
+            if apply_all:
+                # Process all images at once (original behavior)
+                while True:
+                    cur_exposure = _get_params(uid, exposure)[0]
+                    cur_image = image * (2**(cur_exposure))
+                    cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                    _send_ram_preview(cur_image, uid)
 
-                #  Check for button presses
-                if _check_and_clear_flag(uid, "apply"):
-                    exposure = cur_exposure
-                    break
+                    #  Check for button presses
+                    if _check_and_clear_flag(uid, "apply"):
+                        exposure = cur_exposure
+                        break
 
-                if _check_and_clear_flag(uid, "skip"):
-                    return {"result": (image,)}
-                
-                time.sleep(0.25)
-                
-            # Apply final effect after exiting loop
-            result = image * (2**(exposure))
-            result = torch.clamp(result, 0.0, 1.0)
+                    if _check_and_clear_flag(uid, "skip"):
+                        return {"result": (image,)}
+                    
+                    time.sleep(0.25)
+
+                # Apply final effect after exiting loop
+                result = image * (2**(exposure))
+                result = torch.clamp(result, 0.0, 1.0)
+
+            else:
+                # Process images one by one
+                batch_size = image.shape[0]
+                result_list = []
+
+                for i in range(batch_size):
+                    single_image = image[i:i+1]  # Keep batch dimension
+                    
+                    while True:
+                        cur_exposure = _get_params(uid, exposure)[0]
+                        cur_image = single_image * (2**(cur_exposure))
+                        cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                        _send_ram_preview(cur_image, uid)
+
+                        # Check for button presses
+                        if _check_and_clear_flag(uid, "apply"):
+                            final_exposure = cur_exposure
+                            break
+
+                        if _check_and_clear_flag(uid, "skip"):
+                            # Skip this image, use original
+                            result_list.append(single_image)
+                            final_exposure = None
+                            break
+                        
+                        time.sleep(0.25)
+
+                    # Apply final effect for this image if not skipped
+                    if final_exposure is not None:
+                        processed = single_image * (2**(final_exposure))
+                        processed = torch.clamp(processed, 0.0, 1.0)
+                        result_list.append(processed)
+
+                # Concatenate all processed images back into a batch
+                result = torch.cat(result_list, dim=0)
         else:
-            # Auto-apply mode
+            # Auto-apply mode (always processes all images the same way)
             result = image * (2**(exposure))
             result = torch.clamp(result, 0.0, 1.0)
                 

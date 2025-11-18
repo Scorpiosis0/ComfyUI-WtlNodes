@@ -10,13 +10,13 @@ def _set_params(node_id: str, saturation: float) -> None:
     """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (saturation)
+        entry["params"] = (saturation,)
 
 def _get_params(node_id: str, saturation: float) -> tuple[float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (saturation))
+        return entry.get("params", (saturation,))
 
 def _set_flag(node_id: str, flag: str) -> None:
     """Mark a button press – ``flag`` must be ``'apply'`` or ``'skip'``."""
@@ -44,8 +44,7 @@ def _clear_all(node_id: str) -> None:
 
 def _saturation_hsv(image, saturation):
     # image: (1, H, W, C) in range [0,1]
-    img = image[0] # (H, W, C), stays on GPU
-    r, g, b = img[..., 0], img[..., 1], img[..., 2]
+    r, g, b = image[..., 0], image[..., 1], image[..., 2]
 
     # max/min per pixel
     max_c = torch.maximum(torch.maximum(r, g), b)
@@ -103,7 +102,6 @@ def _saturation_hsv(image, saturation):
     r_out[mask5], g_out[mask5], b_out[mask5] = c[mask5], 0, x[mask5]
 
     out = torch.stack([r_out + m, g_out + m, b_out + m], dim=-1)
-    out = out.unsqueeze(0)
     out = torch.clamp(out, 0.0, 1.0)
 
     return (out)
@@ -126,6 +124,11 @@ class saturationNode:
                     "label_on": "On",
                     "label_off": "Off"
                 }),
+                "apply_all": ("BOOLEAN", {
+                    "default": False,
+                    "label_on": "On",
+                    "label_off": "Off"
+                }),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -136,10 +139,9 @@ class saturationNode:
     
     RETURN_TYPES=("IMAGE",)
     FUNCTION="saturation"
-    OUTPUT_NODE = True
     CATEGORY = "WtlNodes/image"
 
-    def saturation(self, image, saturation, auto_apply, unique_id=None, prompt=None, extra_pnginfo=None):
+    def saturation(self, image, saturation, auto_apply, apply_all, unique_id=None, prompt=None, extra_pnginfo=None):
         # Clean any stale data for this node
         if unique_id:
             uid = str(unique_id)
@@ -152,29 +154,64 @@ class saturationNode:
 
         if unique_id and not auto_apply:
             uid = str(unique_id)
-            while True:
 
-                cur_saturation = _get_params(uid, saturation)
-                cur_image = _saturation_hsv(image, cur_saturation)
-                
-                _send_ram_preview(cur_image, uid)
+            if apply_all:
+                # Process all images at once (original behavior)
+                while True:
 
-                #  Check for button presses
-                if _check_and_clear_flag(uid, "apply"):
-                    saturation = cur_saturation
-                    break
+                    cur_saturation = _get_params(uid, saturation)[0]
+                    cur_image = _saturation_hsv(image, cur_saturation)
+                    
+                    _send_ram_preview(cur_image, uid)
 
-                if _check_and_clear_flag(uid, "skip"):
-                    return {"result": (image,)}
-                
-                time.sleep(0.25)
-                
-            # Apply final effect after exiting loop
-            result = _saturation_hsv(image, saturation)
+                    #  Check for button presses
+                    if _check_and_clear_flag(uid, "apply"):
+                        saturation = cur_saturation
+                        break
+
+                    if _check_and_clear_flag(uid, "skip"):
+                        return {"result": (image,)}
+                    
+                    time.sleep(0.25)
+                    
+                # Apply final effect after exiting loop
+                result = _saturation_hsv(image, saturation)
+            else:
+                # Process images one by one
+                batch_size = image.shape[0]
+                result_list = []
+
+                for i in range(batch_size):
+                    single_image = image[i:i+1] # Keep batch dimension
+
+                    while True:
+                        cur_saturation = _get_params(uid, saturation)[0]
+                        cur_image = _saturation_hsv(single_image, cur_saturation)
+                        
+                        _send_ram_preview(cur_image, uid)
+
+                        #  Check for button presses
+                        if _check_and_clear_flag(uid, "apply"):
+                            final_saturation = cur_saturation
+                            break
+
+                        if _check_and_clear_flag(uid, "skip"):
+                            # Skip this image, use original
+                            result_list.append(single_image)
+                            final_saturation = None
+                            break
+                        
+                        time.sleep(0.25)
+
+                    if final_saturation is not None:
+                        processed = _saturation_hsv(single_image, final_saturation)
+                        result_list.append(processed)
+
+                result = torch.cat(result_list, dim=0)
+
         else:
-            # Auto-apply mode
             result = _saturation_hsv(image, saturation)
-                
+                    
         return {"result": (result,)}
     
 NODE_CLASS_MAPPINGS = {"saturationNode": saturationNode}
