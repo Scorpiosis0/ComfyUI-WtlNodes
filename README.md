@@ -103,6 +103,4 @@ Nothing specific, it just adds QOL improvements, use it like the base Empty Late
 
 # Notes 🗒️:
 
-- I will add an emergency button to exist all loops, right now if you delete a node actively in a loop you will need to restart ComfyUI.
-- There are still some bugs I just release this because it's working enough.
-- I will add a button to auto apply/skip the effects.
+- All good.
