@@ -8,8 +8,7 @@
 
 ## 📌 Overview
 
-This repository contains a collection of **custom nodes for ComfyUI**, designed to simplify workflows and add new creative / utility features.  
-Each node is plug-and-play and appears directly inside ComfyUI after installation.
+This repository contains a collection of **custom nodes for ComfyUI**, designed to simplify workflows and add new creative / utility features and genral QOL improvements.  
 
 ---
 
