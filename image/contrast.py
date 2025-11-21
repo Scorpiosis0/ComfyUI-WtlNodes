@@ -55,16 +55,7 @@ class contrast:
                     "step": 1.0,
                     "round": 0.1,
                 }),
-                "auto_apply": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "On",
-                    "label_off": "Off"
-                }),
-                "apply_all": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "On",
-                    "label_off": "Off"
-                }),
+                "apply_type": (["none","auto_apply","apply_all"],),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -75,7 +66,7 @@ class contrast:
     FUNCTION="contrast"
     CATEGORY = "WtlNodes/image"
     
-    def contrast(self, image, contrast, auto_apply, apply_all, unique_id=None):
+    def contrast(self, image, contrast, apply_type, unique_id=None):
 
         # Clean any stale data for this node
         if unique_id:
@@ -85,10 +76,10 @@ class contrast:
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             return {"result": (image,)}
         
-        if unique_id and not auto_apply:
+        if unique_id and not apply_type == "auto_apply":
             uid = str(unique_id)
             
-            if apply_all:
+            if apply_type == "apply_all":
                 # Process all images at once (original behavior)
                 while True:
                     cur_contrast = _get_params(uid, contrast)[0]

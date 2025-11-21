@@ -183,13 +183,9 @@ class DepthDOFNode:
                 depth = depth_np[b]
 
                 while True:
-                    cur_focus, cur_range, cur_edge, cur_hard_range, cur_blur = _get_params(
-                        uid, focus_depth, focus_range, edge_fix, hard_focus_range, blur_strength
-                    )
+                    cur_focus, cur_range, cur_edge, cur_hard_range, cur_blur = _get_params(uid, focus_depth, focus_range, edge_fix, hard_focus_range, blur_strength)
 
-                    preview_result, preview_mask = _apply_dof_to_image(
-                        img, depth, cur_focus, cur_range, cur_hard_range, cur_edge, cur_blur
-                    )
+                    preview_result, preview_mask = _apply_dof_to_image(img, depth, cur_focus, cur_range, cur_hard_range, cur_edge, cur_blur)
                     
                     # Convert mask to RGB for preview
                     mask_rgb = np.stack([preview_mask, preview_mask, preview_mask], axis=-1)

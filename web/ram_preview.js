@@ -9,7 +9,8 @@ app.registerExtension({
             nodeData.name === "DepthDOFNode" ||
             nodeData.name === "Exposure" ||
             nodeData.name === "Contrast" ||
-            nodeData.name === "Brightness"
+            nodeData.name === "Brightness" ||
+            nodeData.name === "ColorTemperatureNode"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;

@@ -55,16 +55,7 @@ class brightness:
                     "step": 1.0,
                     "round": 0.1,
                 }),
-                "auto_apply": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "On",
-                    "label_off": "Off"
-                }),
-                "apply_all": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "On",
-                    "label_off": "Off"
-                }),
+                "apply_type": (["none","auto_apply","apply_all"],),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
@@ -75,7 +66,7 @@ class brightness:
     FUNCTION="brightness"
     CATEGORY = "WtlNodes/image"
     
-    def brightness(self, image, brightness, auto_apply, apply_all, unique_id=None):
+    def brightness(self, image, brightness, apply_type, unique_id=None):
 
         # Clean any stale data for this node
         if unique_id:
@@ -85,10 +76,10 @@ class brightness:
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             return {"result": (image,)}
         
-        if unique_id and not auto_apply:
+        if unique_id and not apply_type == "auto_apply":
             uid = str(unique_id)
 
-            if apply_all:
+            if apply_type == "apply_all":
                 # Process all images at once
                 while True:
                     cur_brightness = _get_params(uid, brightness)[0]

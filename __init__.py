@@ -51,6 +51,10 @@ NODE_HANDLERS = {
     "bri": {
         "module": ".image.brightness",
         "params": ["brightness"]
+    },
+    "tem": {
+        "module": ".image.temperature",
+        "params": ["temperature"]
     }
 }
 

@@ -417,6 +417,65 @@ function setupContrastControls(node) {
     setupNodeRemovalHandler(node, 'con');
 }
 
+function setupTemperatureControls(node) {
+
+    const temperatureWidget = findWidgetByName(node, "temperature");
+
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!temperatureWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'tem',
+                temperature: temperatureWidget.value,
+            })
+        });
+    };
+    
+    // Watch for slider changes and send updated params
+    if (temperatureWidget) {
+        const origCallback = temperatureWidget.callback;
+        temperatureWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'tem',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'tem',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'tem');
+}
+
 function setupBrightnessControls(node) {
 
     const brightnessWidget = findWidgetByName(node, "brightness");
@@ -592,6 +651,10 @@ app.registerExtension({
             case "Brightness":
                 setupBrightnessControls(node);
                 setupNodeRemovalHandler(node, "bri");
+                break;
+            case "ColorTemperatureNode":
+                setupTemperatureControls(node);
+                setupNodeRemovalHandler(node, "tem");
                 break;
         }
     }
