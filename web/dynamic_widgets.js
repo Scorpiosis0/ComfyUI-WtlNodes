@@ -623,20 +623,20 @@ app.registerExtension({
         
         // Setup logic based on node type
         switch(nodeType) {
-            case "AdvancedEmptyLatent":
+            case "EmptyLatent":
                 setupEmptyLatentLogic(node);
                 break;
-            case "ImageTransformNode":
+            case "ImageTransform":
                 setupImageTransformLogic(node);
                 break;
-            case "MaskTransformNode":
+            case "MaskTransform":
                 setupMaskTransformLogic(node);
                 break;
-            case "DepthDOFNode":
+            case "DepthDOF":
                 setupDOFControls(node);
                 setupNodeRemovalHandler(node, "dof");
                 break;
-            case "saturationNode":
+            case "Saturation":
                 setupSaturationControls(node);
                 setupNodeRemovalHandler(node, "sat");
                 break;
@@ -652,7 +652,7 @@ app.registerExtension({
                 setupBrightnessControls(node);
                 setupNodeRemovalHandler(node, "bri");
                 break;
-            case "ColorTemperatureNode":
+            case "Temperature":
                 setupTemperatureControls(node);
                 setupNodeRemovalHandler(node, "tem");
                 break;

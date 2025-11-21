@@ -106,7 +106,7 @@ def _saturation_hsv(image, saturation):
 
     return (out)
 
-class saturationNode:
+class SaturationC:
     @classmethod
     def INPUT_TYPES(cls):
         return{
@@ -205,5 +205,5 @@ class saturationNode:
                     
         return {"result": (result,)}
     
-NODE_CLASS_MAPPINGS = {"saturationNode": saturationNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"saturationNode": "Saturation (HSV)"}
+NODE_CLASS_MAPPINGS = {"Saturation": SaturationC}
+NODE_DISPLAY_NAME_MAPPINGS = {"Saturation": "Saturation (HSV)"}

@@ -11,7 +11,7 @@ SUBMODULES = [
     "image.exposure",
     "image.temperature",
     "image.depth_dof",
-    "image.latentp",
+    "image.latent_a",
     "image.image_trans",
     "mask.mask_trans",
     "mask.mask_processor",

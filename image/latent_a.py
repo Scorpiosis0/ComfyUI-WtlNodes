@@ -1,6 +1,6 @@
 import torch
 
-class AdvancedEmptyLatent:
+class EmptyLatentC:
     # Define aspect ratios and their corresponding resolutions
     RATIOS = {
         "1:1": "1:1",
@@ -72,31 +72,31 @@ class AdvancedEmptyLatent:
                 "use_ratio": ("BOOLEAN", {
                     "default": False,
                     "label_on": "Ratio Mode",
-                    "label_off": "Manual Mode"
+                    "label_off": "Manual Mode",
                 }),
-                "portrait_landscape": ("BOOLEAN", {
+                "orientation": ("BOOLEAN", {
                     "default": False,
                     "label_on": "Potrait",
-                    "label_off": "Landscape"
+                    "label_off": "Landscape",
                 }),
                 "width": ("INT", {
                     "default": 1024,
                     "min": 64,
                     "max": 8192,
-                    "step": 64
+                    "step": 64,
                 }),
                 "height": ("INT", {
                     "default": 1024,
                     "min": 64,
                     "max": 8192,
-                    "step": 64
+                    "step": 64,
                 }),
                 "ratio": (list(cls.RATIOS.values()),),
                 "resolution": (all_resolutions,),  # All possible resolutions
                 "batch_size": ("INT", {
                     "default": 1,
                     "min": 1,
-                    "max": 256
+                    "max": 256,
                 }),
             }
         }
@@ -126,5 +126,5 @@ class AdvancedEmptyLatent:
         
         return ({"samples": latent}, latent_width, latent_height, w, h)
 
-NODE_CLASS_MAPPINGS = {"AdvancedEmptyLatent": AdvancedEmptyLatent}
-NODE_DISPLAY_NAME_MAPPINGS = {"AdvancedEmptyLatent": "Empty Latent (Advanced)"}
+NODE_CLASS_MAPPINGS = {"EmptyLatent": EmptyLatentC}
+NODE_DISPLAY_NAME_MAPPINGS = {"EmptyLatent": "Empty Latent (Advanced)"}

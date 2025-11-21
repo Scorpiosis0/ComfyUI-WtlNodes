@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 
-class ImageTransformNode:
+class ImageTransformC:
     
     INTERPOLATION_METHODS = {
         "area": cv2.INTER_AREA,
@@ -241,5 +241,5 @@ class ImageTransformNode:
         
         return (img,)
 
-NODE_CLASS_MAPPINGS = {"ImageTransformNode": ImageTransformNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"ImageTransformNode": "Image Transform (Advanced)"}
+NODE_CLASS_MAPPINGS = {"ImageTransform": ImageTransformC}
+NODE_DISPLAY_NAME_MAPPINGS = {"ImageTransform": "Image Transform (Advanced)"}

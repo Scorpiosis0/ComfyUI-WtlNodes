@@ -5,7 +5,7 @@ import hashlib
 import time
 
 # Visualizer node
-class VisualizeSigmas:
+class SigmaVisualizerC:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -96,5 +96,5 @@ class VisualizeSigmas:
                 pass
             return Image.new('RGB', (800, 600), color='white')
 
-NODE_CLASS_MAPPINGS = {"VisualizeSigmas": VisualizeSigmas}
-NODE_DISPLAY_NAME_MAPPINGS = {"VisualizeSigmas": "Visualize Sigma Schedule"}
+NODE_CLASS_MAPPINGS = {"SigmaVisualizer": SigmaVisualizerC}
+NODE_DISPLAY_NAME_MAPPINGS = {"SigmaVisualizer": "Visualize Sigma Schedule"}

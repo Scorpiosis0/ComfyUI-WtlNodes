@@ -42,7 +42,7 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-class brightness:
+class BrightnessC:
     @classmethod
     def INPUT_TYPES(cls):
         return{
@@ -143,5 +143,5 @@ class brightness:
                 
         return {"result": (result,)}
     
-NODE_CLASS_MAPPINGS = {"Brightness": brightness}
+NODE_CLASS_MAPPINGS = {"Brightness": BrightnessC}
 NODE_DISPLAY_NAME_MAPPINGS = {"Brightness": "Brightness"}

@@ -119,7 +119,7 @@ def _apply_temperature(image, temperature):
 
         return out
 
-class ColorTemperatureNode:
+class ColorTemperatureC:
     """
     ComfyUI Node for adjusting color temperature using Tanner Helland's approximation.
     """
@@ -129,7 +129,7 @@ class ColorTemperatureNode:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "temperature": ("FLOAT", {
+                "temperature (in Kelvin)": ("FLOAT", {
                     "default": 6500.0,
                     "min": 1000.0,
                     "max": 40000.0,
@@ -219,5 +219,5 @@ class ColorTemperatureNode:
         return {"result": (result,)}
 
 # Node registration for ComfyUI
-NODE_CLASS_MAPPINGS = {"ColorTemperatureNode": ColorTemperatureNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"ColorTemperatureNode": "Color Temperature"}
+NODE_CLASS_MAPPINGS = {"Temperature": ColorTemperatureC}
+NODE_DISPLAY_NAME_MAPPINGS = {"Temperature": "Temperature (Tanner Helland's algorithm)"}

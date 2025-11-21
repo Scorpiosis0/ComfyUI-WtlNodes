@@ -94,7 +94,7 @@ def _apply_dof_to_image(img, depth, focus_depth, focus_range, hard_focus_range, 
 
     return result, blur_mask
 
-class DepthDOFNode:
+class DepthOfFieldC:
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -121,14 +121,14 @@ class DepthDOFNode:
                     "min": 0.0,
                     "max": 0.5,
                     "step": 0.01,
-                    "round": 0.01,
+                    "round": 0.001,
                 }),
                 "focus_range": ("FLOAT", {
                     "default": 0.25,
                     "min": 0.0,
                     "max": 1.0,
                     "step": 0.01,
-                    "round": 0.01,
+                    "round": 0.001,
                 }),
                 "edge_fix": ("INT", {
                     "default": 0,
@@ -237,5 +237,5 @@ class DepthDOFNode:
         print(f"[DOF] Effect applied – returning final image.")
         return (output_img, output_mask)
 
-NODE_CLASS_MAPPINGS = {"DepthDOFNode": DepthDOFNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"DepthDOFNode": "Depth of Field (DOF)"}
+NODE_CLASS_MAPPINGS = {"DepthDOF": DepthOfFieldC}
+NODE_DISPLAY_NAME_MAPPINGS = {"DepthDOF": "Depth of Field (DOF)"}

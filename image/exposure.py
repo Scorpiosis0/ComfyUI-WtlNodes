@@ -42,7 +42,7 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-class exposure:
+class ExposureC:
     @classmethod
     def INPUT_TYPES(cls):
         return{
@@ -143,5 +143,5 @@ class exposure:
                 
         return {"result": (result,)}
 
-NODE_CLASS_MAPPINGS = {"Exposure": exposure}
+NODE_CLASS_MAPPINGS = {"Exposure": ExposureC}
 NODE_DISPLAY_NAME_MAPPINGS = {"Exposure": "Exposure"}

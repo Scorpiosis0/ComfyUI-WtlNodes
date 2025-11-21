@@ -3,7 +3,7 @@ import base64
 import numpy as np
 from PIL import Image
 
-class RAMPreviewImage:
+class RAMPreviewImageC:
     def __init__(self):
         self.compress_level = 0
 
@@ -44,5 +44,5 @@ class RAMPreviewImage:
             }
         }
     
-NODE_CLASS_MAPPINGS = {"RAMPreviewImage": RAMPreviewImage}
+NODE_CLASS_MAPPINGS = {"RAMPreviewImage": RAMPreviewImageC}
 NODE_DISPLAY_NAME_MAPPINGS = {"RAMPreviewImage": "RAM Preview Image"}

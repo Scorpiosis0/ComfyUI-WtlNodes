@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 # Dual ease version with top and bottom control
-class DualEaseCosineScheduler:
+class DualEaseCosineSchedulerC:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -72,5 +72,5 @@ class DualEaseCosineScheduler:
         sigmas = torch.FloatTensor(sigmas)
         return (sigmas,)
 
-NODE_CLASS_MAPPINGS = {"DualEaseCosineScheduler": DualEaseCosineScheduler}
+NODE_CLASS_MAPPINGS = {"DualEaseCosineScheduler": DualEaseCosineSchedulerC}
 NODE_DISPLAY_NAME_MAPPINGS = {"DualEaseCosineScheduler": "Dual Ease Cosine Scheduler"}

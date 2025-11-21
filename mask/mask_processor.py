@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 
-class MaskProcessor:
+class MaskProcessorC:
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -79,5 +79,5 @@ class MaskProcessor:
         
         return blurred
 
-NODE_CLASS_MAPPINGS = {"MaskProcessor": MaskProcessor}
+NODE_CLASS_MAPPINGS = {"MaskProcessor": MaskProcessorC}
 NODE_DISPLAY_NAME_MAPPINGS = {"MaskProcessor": "Mask Processor"}

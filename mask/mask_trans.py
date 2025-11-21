@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 
-class MaskTransformNode:
+class MaskTransformC:
     
     INTERPOLATION_METHODS = {
         "area": cv2.INTER_AREA,
@@ -240,5 +240,5 @@ class MaskTransformNode:
         
         return (mask,)
 
-NODE_CLASS_MAPPINGS = {"MaskTransformNode": MaskTransformNode}
-NODE_DISPLAY_NAME_MAPPINGS = {"MaskTransformNode": "Mask Transform (Advanced)"}
+NODE_CLASS_MAPPINGS = {"MaskTransform": MaskTransformC}
+NODE_DISPLAY_NAME_MAPPINGS = {"MaskTransform": "Mask Transform (Advanced)"}
