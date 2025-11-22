@@ -34,7 +34,7 @@ for submodule in SUBMODULES:
 NODE_HANDLERS = {
     "dof": {
         "module": ".image.depth_dof",
-        "params": ["focus_depth", "focus_range", "edge_fix", "hard_focus_range"]
+        "params": ["focus_depth", "focus_range", "edge_fix", "hard_focus_range","blur_strength"]
     },
     "sat": {
         "module": ".image.saturation",
