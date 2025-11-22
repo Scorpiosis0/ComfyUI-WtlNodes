@@ -80,7 +80,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 
 **Recomended Usage:**
 
-You can reduce the sigma_min value but I wouldn't recommend changing any other settings.
+You can reduce the sigma_min value but I wouldn't recommend changing sigma_max setting.
 
 ### Empty Latent (Advanced)
 *This node will offer easy ratio selection along a plethora of resolutions, portrait and landscape mode, with still a manual mode.*
