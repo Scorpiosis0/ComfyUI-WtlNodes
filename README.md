@@ -47,12 +47,24 @@ Use the summary table below to quickly jump to any node’s documentation.
 ## 📚 Summary Table
 | Node Name | Short Description | Link |
 |---|---|---|
-| Dual Ease Cosine Scheduler | One sentence describing this node. | [Jump to Section](#dual-ease-cosine-scheduler) |
-| Empty Latent (Advanced) | Empty Latent node with QOL improvments. | [Jump to Section](#empty-latent-advanced) |
-| Depth of Field (DOF) | Applies DoF based on a depth map. | [Jump to Section](#depth-of-field-dof) |
+| Saturation (HSV) | [Jump to Section](#saturation_hsv) |
+| Dual Ease Cosine Scheduler | [Jump to Section](#dual-ease-cosine-scheduler) |
+| Empty Latent (Advanced) | [Jump to Section](#empty-latent-advanced) |
+| Depth of Field (DOF) | [Jump to Section](#depth-of-field-dof) |
 ---
 
 ## 🧩 Node Documentation
+
+### Saturation (HSV)
+*This node allows you to tweak image saturation through a live preview.*
+
+**Settings:**
+| Setting Name | Description |
+|-------------|-------------|
+| saturation | Controls how many steps will be made. |
+| apply_type | Controls how to handle batches. |
+| Apply Effect | This button applies the effect of saturation. |
+| Skip Effect | This button skips the effect of saturation. |
 
 ### Dual Ease Cosine Scheduler
 *This node is a custom scheduler I made that needs further testing. It's been tested using FID (Fréchet Inception Distance) along ablation to find the rough best default values.*
@@ -83,10 +95,6 @@ You can reduce the sigma_min value but I wouldn't recommend changing any other s
 | width & height | Allows you to select the x and y resolution of the image manually. |
 | batch | Allows you to select the amount of created latent in one run. |
 
-**Recomended Usage:**
-
-Nothing specific, it just adds QOL improvements, use it like the base Empty Latent Image node.
-
 ### Depth of Field (DOF)
 *This node uses a depth map that you can make via any depth map model to apply a depth blur effect with a real time preview.*
 
@@ -99,6 +107,10 @@ Nothing specific, it just adds QOL improvements, use it like the base Empty Late
 | edge_fix | On some depth models you might want to set this setting at a recomended value of 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects. |
 | Apply Effect | This button applies the effect of blur. |
 | Skip Effect | This button skips the effect of blur. |
+
+**Recomended Usage:**
+
+Use Depth Anything V2 or DepthPro for best results, Depth pro is the best for characters but struggles with backgrounds.
 
 # Notes 🗒️:
 
