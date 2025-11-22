@@ -1,0 +1,16 @@
+[project]
+name = "comfyui-wtlnodes"
+description = "This repository contains a collection of custom nodes for ComfyUI, designed to simplify workflows and add new creative / utility features and genral QOL improvements."
+version = "0.2.0"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy",
+]
+
+[project.urls]
+Repository = "https://github.com/Scorpiosis0/ComfyUI-WtlNodes"
+
+[tool.comfy]
+PublisherId = "writili"
+DisplayName = "ComfyUI-WtlNodes"
+Icon = ""
