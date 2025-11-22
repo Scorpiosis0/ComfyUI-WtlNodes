@@ -47,7 +47,7 @@ Use the summary table below to quickly jump to any node’s documentation.
 ## 📚 Summary Table
 | Node Name | Short Description | Link |
 |---|---|---|
-| Saturation (HSV) | [Jump to Section](#saturation_hsv) |
+| Saturation (HSV) | [Jump to Section](#saturation-hsv) |
 | Dual Ease Cosine Scheduler | [Jump to Section](#dual-ease-cosine-scheduler) |
 | Empty Latent (Advanced) | [Jump to Section](#empty-latent-advanced) |
 | Depth of Field (DOF) | [Jump to Section](#depth-of-field-dof) |
