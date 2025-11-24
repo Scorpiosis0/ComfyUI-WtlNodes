@@ -88,8 +88,8 @@ You can reduce the sigma_min value but I wouldn't recommend changing sigma_max s
 **Settings:**
 | Setting Name | Description |
 |-------------|-------------|
-| use_ratio | Ables you to switch between Ratio Mode and Manual Mode. |
-| portrait_landscape | Ables you to switch between Portrait and Landscape while in ratio mode, thus inverting x and y values. |
+| use_ratio | enables you to switch between Ratio Mode and Manual Mode. |
+| portrait_landscape | enables you to switch between Portrait and Landscape while in ratio mode, thus inverting x and y values. |
 | ratio | Allows you to select a ratio from a predefined list. |
 | resolution | Allows you to select a resolution from a predefined list based on the ratio. All resolutions are multiples of 64 to avoid generation artifacts. |
 | width & height | Allows you to select the x and y resolution of the image manually. |
@@ -101,7 +101,7 @@ You can reduce the sigma_min value but I wouldn't recommend changing sigma_max s
 **Settings:**
 | Setting Name | Description |
 |-------------|-------------|
-| focus_depth | Ables you to set the focus point in the depth map, where 0 is the background and 1 the foreground. |
+| focus_depth | enables you to set the focus point in the depth map, where 0 is the background and 1 the foreground. |
 | blur_strenght | Allows you to apply more or less blur on the depth that isn't in focus. |
 | focus_range | Allows you to choose the range/fall-off from the focus point to enlarge the focus range. |
 | edge_fix | On some depth models you might want to set this setting at a recomended value of 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects. |
