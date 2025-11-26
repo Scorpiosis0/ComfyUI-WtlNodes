@@ -18,4 +18,3 @@ Documentation = "https://github.com/Scorpiosis0/ComfyUI-WtlNodes/wiki"
 PublisherId = "writili"
 DisplayName = "ComfyUI-WtlNodes"
 Icon = ""
-includes = []
