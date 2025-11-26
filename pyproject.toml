@@ -1,5 +1,5 @@
 [project]
-name = "wtlnodes"
+name = "ComfyUI-WtlNodes"
 description = "This node adds improvement over some already existing nodes as well as some custom nodes."
 version = "1.0.0"
 license = {file = "LICENSE"}
