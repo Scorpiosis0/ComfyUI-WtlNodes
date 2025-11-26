@@ -157,10 +157,11 @@ function setupDOFControls(node) {
     const focusRangeWidget = findWidgetByName(node, "focus_range");
     const edgeFixWidget = findWidgetByName(node, "edge_fix");
     const hardFocusRangeWidget = findWidgetByName(node, "hard_focus_range");
+    const blurStrengthWidget = findWidgetByName(node, "blur_strength");
     
     // Function to send updated parameters to Python
     const sendParams = () => {
-        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget) return;
+        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget || !blurStrengthWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -171,7 +172,8 @@ function setupDOFControls(node) {
                 focus_depth: focusDepthWidget.value,
                 focus_range: focusRangeWidget.value,
                 edge_fix: edgeFixWidget.value,
-                hard_focus_range : hardFocusRangeWidget.value
+                hard_focus_range : hardFocusRangeWidget.value,
+                blur_strength : blurStrengthWidget.value
             })
         });
     };
@@ -204,6 +206,14 @@ function setupDOFControls(node) {
     if (hardFocusRangeWidget) {
         const origCallback = hardFocusRangeWidget.callback;
         hardFocusRangeWidget.callback = function(value) {
+            sendParams();
+            if (origCallback) origCallback.call(this, value);
+        };
+    }
+
+    if (blurStrengthWidget) {
+        const origCallback = blurStrengthWidget.callback;
+        blurStrengthWidget.callback = function(value) {
             sendParams();
             if (origCallback) origCallback.call(this, value);
         };

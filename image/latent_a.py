@@ -106,9 +106,9 @@ class EmptyLatentC:
     FUNCTION = "generate"
     CATEGORY = "WtlNodes/latent"
 
-    def generate(self, use_ratio, portrait_landscape, width, height, ratio, resolution, batch_size):
+    def generate(self, use_ratio, orientation, width, height, ratio, resolution, batch_size):
         if use_ratio:
-            if portrait_landscape:
+            if orientation:
                 # Parse resolution string (e.g., "1024x1024")
                 h, w = map(int, resolution.split('x'))
             else:
