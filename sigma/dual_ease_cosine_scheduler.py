@@ -13,12 +13,12 @@ class DualEaseCosineSchedulerC:
                     "max": 10000
                 }),
                 "sigma_max": ("FLOAT",{
-                    "default": 14.6146,
+                    "default": 14.614642,
                     "min": 0.0, "max": 1000.0,
                     "step": 0.01
                 }),
                 "sigma_min": ("FLOAT",{
-                    "default": 0.0292,
+                    "default": 0.02917,
                     "min": 0.0,
                     "max": 1000.0,
                     "step": 0.01

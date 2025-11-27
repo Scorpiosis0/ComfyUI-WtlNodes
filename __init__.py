@@ -13,8 +13,18 @@ SUBMODULES = [
     "image.depth_dof",
     "image.latent_a",
     "image.image_trans",
-    "mask.mask_trans",
+    "image.highlight_shadow",
+    "image.hue",
+    "image.image_resize",
+    "image.image_rotation",
+    "image.image_zoom",
+    "image.image_translation",
+    "mask.mask_resize",
+    "mask.mask_rotation",
+    "mask.mask_zoom",
+    "mask.mask_translation",
     "mask.mask_processor",
+    "mask.mask_filter",
     "sigma.dual_ease_cosine_scheduler",
     "sigma.sigma_visualizer",
     "image.ram_preview_image",
@@ -55,6 +65,54 @@ NODE_HANDLERS = {
     "tem": {
         "module": ".image.temperature",
         "params": ["temperature"]
+    },
+    "hue": {
+        "module": ".image.hue",
+        "params": ["hue"]
+    },
+    "mfl": {
+        "module": ".mask.mask_filter",
+        "params": ["area_x", "area_y", "keep"]
+    },
+    "has": {
+        "module": ".image.highlight_shadow",
+        "params": ["shadow_adjustment", "highlight_adjustment", "midpoint", "feather_radius"]
+    },
+    "mpr": {
+        "module": ".mask.mask_processor",
+        "params": ["dilate_erode", "feather"]
+    },
+    "iro": {
+        "module": ".image.image_rotation",
+        "params": ["rotate", "interpolation", "fit_mode"]
+    },
+    "ire": {
+        "module": ".image.image_resize",
+        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode"]
+    },
+    "izo": {
+        "module": ".image.image_zoom",
+        "params": ["zoom", "interpolation"]
+    },
+    "itr": {
+        "module": ".image.image_translation",
+        "params": ["translate_x", "translate_y"]
+    },
+    "mro": {
+        "module": ".mask.mask_rotation",
+        "params": ["rotate", "interpolation", "fit_mode"]
+    },
+    "mre": {
+        "module": ".mask.mask_resize",
+        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode"]
+    },
+    "mzo": {
+        "module": ".mask.mask_zoom",
+        "params": ["zoom", "interpolation"]
+    },
+    "mtr": {
+        "module": ".mask.mask_translation",
+        "params": ["translate_x", "translate_y"]
     }
 }
 

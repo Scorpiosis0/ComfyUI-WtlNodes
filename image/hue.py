@@ -1,22 +1,22 @@
 import torch
-import threading
 import time
+import threading
 from ..helper.ram_preview import _send_ram_preview
 
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
 
-def _set_params(node_id: str, exposure: float) -> None:
+def _set_params(node_id: str, hue: float) -> None:
     """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (exposure,)
+        entry["params"] = (hue,)
 
-def _get_params(node_id: str, exposure: float) -> tuple[float]:
+def _get_params(node_id: str, hue: float) -> tuple[float]:
     """Return the latest parameters (or the defaults if nothing was set)."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (exposure,))
+        return entry.get("params", (hue,))
 
 def _set_flag(node_id: str, flag: str) -> None:
     """Mark a button press – ``flag`` must be ``'apply'`` or ``'skip'``."""
@@ -42,18 +42,82 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-class ExposureC:
+def _hue_hsv(image, hue):
+    # image: (1, H, W, C) in range [0,1]
+    r, g, b = image[..., 0], image[..., 1], image[..., 2]
+
+    # max/min per pixel
+    max_c = torch.maximum(torch.maximum(r, g), b)
+    min_c = torch.minimum(torch.minimum(r, g), b)
+    delta = max_c - min_c
+
+    v = max_c
+    s = torch.where(max_c != 0, delta / max_c, torch.zeros_like(max_c))
+
+    # compute hue (same logic as NumPy)
+    h = torch.zeros_like(max_c)
+    mask = delta != 0
+
+    mask_r = mask & (r == max_c)
+    h[mask_r] = 60 * (((g[mask_r] - b[mask_r]) / delta[mask_r]) % 6)
+
+    mask_g = mask & (g == max_c)
+    h[mask_g] = 60 * (((b[mask_g] - r[mask_g]) / delta[mask_g]) + 2)
+
+    mask_b = mask & (b == max_c)
+    h[mask_b] = 60 * (((r[mask_b] - g[mask_b]) / delta[mask_b]) + 4)
+
+    h = h % 360
+
+    # Apply hue
+    h = (h + hue) % 360
+
+    # HSV -> RGB
+    c = v * s
+    x = c * (1 - torch.abs((h / 60) % 2 - 1))
+    m = v - c
+
+    h_i = (h / 60).long()
+
+    r_out = torch.zeros_like(h)
+    g_out = torch.zeros_like(h)
+    b_out = torch.zeros_like(h)
+
+    mask0 = h_i == 0
+    r_out[mask0], g_out[mask0], b_out[mask0] = c[mask0], x[mask0], 0
+
+    mask1 = h_i == 1
+    r_out[mask1], g_out[mask1], b_out[mask1] = x[mask1], c[mask1], 0
+
+    mask2 = h_i == 2
+    r_out[mask2], g_out[mask2], b_out[mask2] = 0, c[mask2], x[mask2]
+
+    mask3 = h_i == 3
+    r_out[mask3], g_out[mask3], b_out[mask3] = 0, x[mask3], c[mask3]
+
+    mask4 = h_i == 4
+    r_out[mask4], g_out[mask4], b_out[mask4] = x[mask4], 0, c[mask4]
+
+    mask5 = h_i == 5
+    r_out[mask5], g_out[mask5], b_out[mask5] = c[mask5], 0, x[mask5]
+
+    out = torch.stack([r_out + m, g_out + m, b_out + m], dim=-1)
+    out = torch.clamp(out, 0.0, 1.0)
+
+    return (out)
+
+class HueC:
     @classmethod
     def INPUT_TYPES(cls):
         return{
             "required":{
                 "image":("IMAGE",),
-                "exposure":("FLOAT",{
+                "hue":("FLOAT",{
                     "default": 0.0,
-                    "min": -10.0,
-                    "max": 10.0,
-                    "step": 0.1,
-                    "round": 0.01,
+                    "min": 0.0,
+                    "max": 360.0,
+                    "step": 1.0,
+                    "round": 0.1,
                 }),
                 "apply_type": (["none","auto_apply","apply_all"],),
             },
@@ -63,10 +127,10 @@ class ExposureC:
         }
     
     RETURN_TYPES=("IMAGE",)
-    FUNCTION="exposure"
+    FUNCTION="hue"
     CATEGORY = "WtlNodes/image"
-    
-    def exposure(self, image, exposure, apply_type, unique_id=None):
+
+    def hue (self, image, hue, apply_type, unique_id=None):
 
         # Clean any stale data for this node
         if unique_id:
@@ -82,14 +146,13 @@ class ExposureC:
             if apply_type == "apply_all":
                 # Process all images at once (original behavior)
                 while True:
-                    cur_exposure = _get_params(uid, exposure)[0]
-                    cur_image = image * (2**(cur_exposure))
-                    cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                    cur_hue = _get_params(uid, hue)[0]
+                    cur_image = _hue_hsv(image, cur_hue)
                     _send_ram_preview(cur_image, uid)
 
                     #  Check for button presses
                     if _check_and_clear_flag(uid, "apply"):
-                        exposure = cur_exposure
+                        hue = cur_hue
                         break
 
                     if _check_and_clear_flag(uid, "skip"):
@@ -98,7 +161,7 @@ class ExposureC:
                     time.sleep(0.25)
 
                 # Apply final effect after exiting loop
-                result = image * (2**(exposure))
+                result = _hue_hsv(image, hue)
                 result = torch.clamp(result, 0.0, 1.0)
 
             else:
@@ -110,38 +173,36 @@ class ExposureC:
                     single_image = image[i:i+1]  # Keep batch dimension
                     
                     while True:
-                        cur_exposure = _get_params(uid, exposure)[0]
-                        cur_image = single_image * (2**(cur_exposure))
-                        cur_image = torch.clamp(cur_image, 0.0, 1.0)
+                        cur_hue = _get_params(uid, hue)[0]
+                        cur_image = _hue_hsv(single_image, cur_hue)
                         _send_ram_preview(cur_image, uid)
 
                         # Check for button presses
                         if _check_and_clear_flag(uid, "apply"):
-                            final_exposure = cur_exposure
+                            final_hue = cur_hue
                             break
 
                         if _check_and_clear_flag(uid, "skip"):
                             # Skip this image, use original
                             result_list.append(single_image)
-                            final_exposure = None
+                            final_hue = None
                             break
                         
                         time.sleep(0.25)
 
                     # Apply final effect for this image if not skipped
-                    if final_exposure is not None:
-                        processed = single_image * (2**(final_exposure))
-                        processed = torch.clamp(processed, 0.0, 1.0)
+                    if final_hue is not None:
+                        processed = _hue_hsv(single_image, final_hue)
                         result_list.append(processed)
 
                 # Concatenate all processed images back into a batch
                 result = torch.cat(result_list, dim=0)
         else:
             # Auto-apply mode (always processes all images the same way)
-            result = image * (2**(exposure))
+            result = _hue_hsv(image, hue)
             result = torch.clamp(result, 0.0, 1.0)
                 
         return {"result": (result,)}
 
-NODE_CLASS_MAPPINGS = {"Exposure": ExposureC}
-NODE_DISPLAY_NAME_MAPPINGS = {"Exposure": "Exposure"}
+NODE_CLASS_MAPPINGS = {"Hue": HueC}
+NODE_DISPLAY_NAME_MAPPINGS = {"Hue": "Hue"}

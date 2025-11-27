@@ -10,7 +10,19 @@ app.registerExtension({
             nodeData.name === "Exposure" ||
             nodeData.name === "Contrast" ||
             nodeData.name === "Brightness" ||
-            nodeData.name === "Temperature"
+            nodeData.name === "Temperature" ||
+            nodeData.name === "Hue" ||
+            nodeData.name === "MaskFilter" ||
+            nodeData.name === "HighlightShadow" ||
+            nodeData.name === "MaskProcessor" ||
+            nodeData.name === "ImageZoom" ||
+            nodeData.name === "ImageTranslation" ||
+            nodeData.name === "ImageRotation" ||
+            nodeData.name === "ImageResize" ||
+            nodeData.name === "MaskZoom" ||
+            nodeData.name === "MaskTranslation" ||
+            nodeData.name === "MaskRotation" ||
+            nodeData.name === "MaskResize"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;
