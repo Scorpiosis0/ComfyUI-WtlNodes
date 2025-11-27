@@ -1,8 +1,8 @@
 [project]
-name = "comfyui-wtlnodes"
-description = "This repository contains a collection of custom nodes for ComfyUI, designed to simplify workflows and add new creative / utility features and genral QOL improvements."
+name = "ComfyUI-WtlNodes"
+description = "This node adds improvement over some already existing nodes as well as some custom nodes."
 version = "1.0.0"
-license = { file = "LICENSE" }
+license = {file = "LICENSE"}
 dependencies = [
     "numpy",
     "scipy",
@@ -11,6 +11,8 @@ dependencies = [
 
 [project.urls]
 Repository = "https://github.com/Scorpiosis0/ComfyUI-WtlNodes"
+Documentation = "https://github.com/Scorpiosis0/ComfyUI-WtlNodes/wiki"
+"Bug Tracker" = "https://github.com/Scorpiosis0/ComfyUI-WtlNodes/issues"
 
 [tool.comfy]
 PublisherId = "writili"
