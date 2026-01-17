@@ -208,10 +208,7 @@ class DepthOfFieldC:
 
                 # Apply final effect for this image if not skipped
                 if final_params is not None:
-                    result, mask = _apply_dof_to_image(
-                        img, depth, final_params[0], final_params[1], 
-                        final_params[3], final_params[2], final_params[4]
-                    )
+                    result, mask = _apply_dof_to_image(img, depth, final_params[0], final_params[1], final_params[3], final_params[2], final_params[4])
                     results.append(result)
                     masks.append(mask)
 
@@ -224,10 +221,7 @@ class DepthOfFieldC:
             masks = []
 
             for b in range(batch_size):
-                result, mask = _apply_dof_to_image(
-                    img_np[b], depth_np[b], focus_depth, focus_range, 
-                    hard_focus_range, edge_fix, blur_strength
-                )
+                result, mask = _apply_dof_to_image(img_np[b], depth_np[b], focus_depth, focus_range, hard_focus_range, edge_fix, blur_strength)
                 results.append(result)
                 masks.append(mask)
 

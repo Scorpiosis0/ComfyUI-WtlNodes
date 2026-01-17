@@ -8,15 +8,15 @@ from ..helper.ram_preview import _send_ram_preview
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
 
-def _set_params(node_id: str, translate_x: int, translate_y: int) -> None:
+def _set_params(node_id: str, translate_x: int, translate_y: int, bg_color: str) -> None:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (translate_x, translate_y)
+        entry["params"] = (translate_x, translate_y, bg_color)
 
-def _get_params(node_id: str, translate_x: int, translate_y: int) -> tuple[int, int]:
+def _get_params(node_id: str, translate_x: int, translate_y: int, bg_color: str) -> tuple[int, int, str]:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (translate_x, translate_y))
+        return entry.get("params", (translate_x, translate_y, bg_color))
 
 def _set_flag(node_id: str, flag: str) -> None:
     with _CONTROL_LOCK:
@@ -39,10 +39,16 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-def apply_translation(image, tx, ty):
+def apply_translation(image, tx, ty, bg_color):
     img_np = image.cpu().numpy()
     batch_size = img_np.shape[0]
     results = []
+    
+    # Determine background value
+    if bg_color == "white":
+        bg_value = (255, 255, 255)
+    else:  # black
+        bg_value = (0, 0, 0)
     
     for b in range(batch_size):
         img = img_np[b]
@@ -51,7 +57,7 @@ def apply_translation(image, tx, ty):
         img_uint8 = (img * 255).astype(np.uint8)
         translation_matrix = np.float32([[1, 0, tx], [0, 1, ty]])
         translated = cv2.warpAffine(img_uint8, translation_matrix, (w, h), 
-                                    borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+                                    borderMode=cv2.BORDER_CONSTANT, borderValue=bg_value)
         
         img_float = translated.astype(np.float32) / 255.0
         results.append(img_float)
@@ -78,6 +84,7 @@ class ImageTranslationC:
                     "max": 4096,
                     "step": 1
                 }),
+                "bg_color": (["black", "white"],),
                 "apply_type": (["none", "auto_apply", "apply_all"],),
             },
             "hidden": {
@@ -89,7 +96,7 @@ class ImageTranslationC:
     FUNCTION = "translate"
     CATEGORY = "WtlNodes/image"
 
-    def translate(self, image, translate_x, translate_y, apply_type, unique_id=None):
+    def translate(self, image, translate_x, translate_y, bg_color, apply_type, unique_id=None):
         if unique_id:
             uid = str(unique_id)
             _clear_all(uid)
@@ -102,12 +109,12 @@ class ImageTranslationC:
 
             if apply_type == "apply_all":
                 while True:
-                    cur_tx, cur_ty = _get_params(uid, translate_x, translate_y)
-                    cur_image = apply_translation(image, cur_tx, cur_ty)
+                    cur_tx, cur_ty, cur_bg = _get_params(uid, translate_x, translate_y, bg_color)
+                    cur_image = apply_translation(image, cur_tx, cur_ty, cur_bg)
                     _send_ram_preview(cur_image, uid)
 
                     if _check_and_clear_flag(uid, "apply"):
-                        translate_x, translate_y = cur_tx, cur_ty
+                        translate_x, translate_y, bg_color = cur_tx, cur_ty, cur_bg
                         break
 
                     if _check_and_clear_flag(uid, "skip"):
@@ -115,7 +122,7 @@ class ImageTranslationC:
                     
                     time.sleep(0.25)
 
-                result = apply_translation(image, translate_x, translate_y)
+                result = apply_translation(image, translate_x, translate_y, bg_color)
 
             else:
                 batch_size = image.shape[0]
@@ -125,12 +132,12 @@ class ImageTranslationC:
                     single_image = image[i:i+1]
                     
                     while True:
-                        cur_tx, cur_ty = _get_params(uid, translate_x, translate_y)
-                        cur_image = apply_translation(single_image, cur_tx, cur_ty)
+                        cur_tx, cur_ty, cur_bg = _get_params(uid, translate_x, translate_y, bg_color)
+                        cur_image = apply_translation(single_image, cur_tx, cur_ty, cur_bg)
                         _send_ram_preview(cur_image, uid)
 
                         if _check_and_clear_flag(uid, "apply"):
-                            final_tx, final_ty = cur_tx, cur_ty
+                            final_tx, final_ty, final_bg = cur_tx, cur_ty, cur_bg
                             break
 
                         if _check_and_clear_flag(uid, "skip"):
@@ -141,12 +148,12 @@ class ImageTranslationC:
                         time.sleep(0.25)
 
                     if final_tx is not None:
-                        processed = apply_translation(single_image, final_tx, final_ty)
+                        processed = apply_translation(single_image, final_tx, final_ty, final_bg)
                         result_list.append(processed)
 
                 result = torch.cat(result_list, dim=0)
         else:
-            result = apply_translation(image, translate_x, translate_y)
+            result = apply_translation(image, translate_x, translate_y, bg_color)
                 
         return {"result": (result,)}
 

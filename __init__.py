@@ -11,8 +11,8 @@ SUBMODULES = [
     "image.exposure",
     "image.temperature",
     "image.depth_dof",
+    "image.camera_depth_dof",
     "image.latent_a",
-    "image.image_trans",
     "image.highlight_shadow",
     "image.hue",
     "image.image_resize",
@@ -44,6 +44,10 @@ for submodule in SUBMODULES:
 NODE_HANDLERS = {
     "dof": {
         "module": ".image.depth_dof",
+        "params": ["focus_depth", "focus_range", "edge_fix", "hard_focus_range","blur_strength"]
+    },
+    "cdof": {
+        "module": ".image.camera_depth_dof",
         "params": ["focus_depth", "focus_range", "edge_fix", "hard_focus_range","blur_strength"]
     },
     "sat": {
@@ -84,35 +88,35 @@ NODE_HANDLERS = {
     },
     "iro": {
         "module": ".image.image_rotation",
-        "params": ["rotate", "interpolation", "fit_mode"]
+        "params": ["rotate", "interpolation", "fit_mode", "bg_color"]
     },
     "ire": {
         "module": ".image.image_resize",
-        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode"]
+        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode", "bg_color"]
     },
     "izo": {
         "module": ".image.image_zoom",
-        "params": ["zoom", "interpolation"]
+        "params": ["zoom", "interpolation", "translate_x", "translate_y", "bg_color"]
     },
     "itr": {
         "module": ".image.image_translation",
-        "params": ["translate_x", "translate_y"]
+        "params": ["translate_x", "translate_y", "bg_color"]
     },
     "mro": {
         "module": ".mask.mask_rotation",
-        "params": ["rotate", "interpolation", "fit_mode"]
+        "params": ["rotate", "interpolation", "fit_mode", "enhanced_visibility"]
     },
     "mre": {
         "module": ".mask.mask_resize",
-        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode"]
+        "params": ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode", "enhanced_visibility"]
     },
     "mzo": {
         "module": ".mask.mask_zoom",
-        "params": ["zoom", "interpolation"]
+        "params": ["zoom", "interpolation", "translate_x", "translate_y", "enhanced_visibility"]
     },
     "mtr": {
         "module": ".mask.mask_translation",
-        "params": ["translate_x", "translate_y"]
+        "params": ["translate_x", "translate_y", "enhanced_visibility"]
     }
 }
 

@@ -8,15 +8,15 @@ from ..helper.ram_preview import _send_ram_preview
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
 
-def _set_params(node_id: str, resize_by: bool, width: int, height: int, multiplier: float, interpolation: str, fit_mode: str) -> None:
+def _set_params(node_id: str, resize_by: bool, width: int, height: int, multiplier: float, interpolation: str, fit_mode: str, bg_color: str) -> None:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (resize_by, width, height, multiplier, interpolation, fit_mode)
+        entry["params"] = (resize_by, width, height, multiplier, interpolation, fit_mode, bg_color)
 
-def _get_params(node_id: str, resize_by: bool, width: int, height: int, multiplier: float, interpolation: str, fit_mode: str) -> tuple:
+def _get_params(node_id: str, resize_by: bool, width: int, height: int, multiplier: float, interpolation: str, fit_mode: str, bg_color: str) -> tuple:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (resize_by, width, height, multiplier, interpolation, fit_mode))
+        return entry.get("params", (resize_by, width, height, multiplier, interpolation, fit_mode, bg_color))
 
 def _set_flag(node_id: str, flag: str) -> None:
     with _CONTROL_LOCK:
@@ -39,10 +39,13 @@ def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
-def apply_resize(image, resize_by, width, height, multiplier, interp_method, fit_mode):
+def apply_resize(image, resize_by, width, height, multiplier, interp_method, fit_mode, bg_color):
     img_np = image.cpu().numpy()
     batch_size = img_np.shape[0]
     results = []
+    
+    # Determine background value
+    bg_value = 255 if bg_color == "white" else 0
     
     for b in range(batch_size):
         img = img_np[b]
@@ -93,7 +96,7 @@ def apply_resize(image, resize_by, width, height, multiplier, interp_method, fit
             
             resized = cv2.resize(img_uint8, (new_w, new_h), interpolation=interp_method)
             
-            result_img = np.zeros((target_h, target_w, img_uint8.shape[2]), dtype=img_uint8.dtype)
+            result_img = np.full((target_h, target_w, img_uint8.shape[2]), bg_value, dtype=img_uint8.dtype)
             
             start_x = (target_w - new_w) // 2
             start_y = (target_h - new_h) // 2
@@ -148,6 +151,7 @@ class ImageResizeC:
                     "default": "bilinear",
                 }),
                 "fit_mode": (["crop", "adjust", "fit"],),
+                "bg_color": (["black", "white"],),
                 "apply_type": (["none", "auto_apply", "apply_all"],),
             },
             "hidden": {
@@ -160,7 +164,7 @@ class ImageResizeC:
     CATEGORY = "WtlNodes/image"
 
     def resize(self, image, resize_by, width, height, multiplier, interpolation, fit_mode, 
-               apply_type, unique_id=None):
+               bg_color, apply_type, unique_id=None):
         interp_method = self.INTERPOLATION_METHODS[interpolation]
         
         if unique_id:
@@ -176,16 +180,16 @@ class ImageResizeC:
             if apply_type == "apply_all":
                 while True:
                     cur_params = _get_params(uid, resize_by, width, height, multiplier, 
-                                            interpolation, fit_mode)
-                    cur_resize_by, cur_w, cur_h, cur_mult, cur_interp, cur_fit = cur_params
+                                            interpolation, fit_mode, bg_color)
+                    cur_resize_by, cur_w, cur_h, cur_mult, cur_interp, cur_fit, cur_bg = cur_params
                     cur_method = self.INTERPOLATION_METHODS[cur_interp]
                     cur_image = apply_resize(image, cur_resize_by, cur_w, cur_h, cur_mult, 
-                                            cur_method, cur_fit)
+                                            cur_method, cur_fit, cur_bg)
                     _send_ram_preview(cur_image, uid)
 
                     if _check_and_clear_flag(uid, "apply"):
                         resize_by, width, height = cur_resize_by, cur_w, cur_h
-                        multiplier, interpolation, fit_mode = cur_mult, cur_interp, cur_fit
+                        multiplier, interpolation, fit_mode, bg_color = cur_mult, cur_interp, cur_fit, cur_bg
                         interp_method = cur_method
                         break
 
@@ -195,7 +199,7 @@ class ImageResizeC:
                     time.sleep(0.25)
 
                 result = apply_resize(image, resize_by, width, height, multiplier, 
-                                     interp_method, fit_mode)
+                                     interp_method, fit_mode, bg_color)
 
             else:
                 batch_size = image.shape[0]
@@ -206,16 +210,16 @@ class ImageResizeC:
                     
                     while True:
                         cur_params = _get_params(uid, resize_by, width, height, multiplier, 
-                                                interpolation, fit_mode)
-                        cur_resize_by, cur_w, cur_h, cur_mult, cur_interp, cur_fit = cur_params
+                                                interpolation, fit_mode, bg_color)
+                        cur_resize_by, cur_w, cur_h, cur_mult, cur_interp, cur_fit, cur_bg = cur_params
                         cur_method = self.INTERPOLATION_METHODS[cur_interp]
                         cur_image = apply_resize(single_image, cur_resize_by, cur_w, cur_h, 
-                                                cur_mult, cur_method, cur_fit)
+                                                cur_mult, cur_method, cur_fit, cur_bg)
                         _send_ram_preview(cur_image, uid)
 
                         if _check_and_clear_flag(uid, "apply"):
                             final_params = (cur_resize_by, cur_w, cur_h, cur_mult, 
-                                          cur_interp, cur_fit, cur_method)
+                                          cur_interp, cur_fit, cur_bg, cur_method)
                             break
 
                         if _check_and_clear_flag(uid, "skip"):
@@ -226,15 +230,15 @@ class ImageResizeC:
                         time.sleep(0.25)
 
                     if final_params is not None:
-                        f_resize_by, f_w, f_h, f_mult, f_interp, f_fit, f_method = final_params
+                        f_resize_by, f_w, f_h, f_mult, f_interp, f_fit, f_bg, f_method = final_params
                         processed = apply_resize(single_image, f_resize_by, f_w, f_h, 
-                                               f_mult, f_method, f_fit)
+                                               f_mult, f_method, f_fit, f_bg)
                         result_list.append(processed)
 
                 result = torch.cat(result_list, dim=0)
         else:
             result = apply_resize(image, resize_by, width, height, multiplier, 
-                                 interp_method, fit_mode)
+                                 interp_method, fit_mode, bg_color)
                 
         return {"result": (result,)}
 

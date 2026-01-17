@@ -22,7 +22,8 @@ app.registerExtension({
             nodeData.name === "MaskZoom" ||
             nodeData.name === "MaskTranslation" ||
             nodeData.name === "MaskRotation" ||
-            nodeData.name === "MaskResize"
+            nodeData.name === "MaskResize" ||
+            nodeData.name === "CameraDepthDOF"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;

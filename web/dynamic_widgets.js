@@ -178,46 +178,15 @@ function setupDOFControls(node) {
         });
     };
     
-    // Watch for slider changes and send updated params
-    if (focusDepthWidget) {
-        const origCallback = focusDepthWidget.callback;
-        focusDepthWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    if (focusRangeWidget) {
-        const origCallback = focusRangeWidget.callback;
-        focusRangeWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (edgeFixWidget) {
-        const origCallback = edgeFixWidget.callback;
-        edgeFixWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (hardFocusRangeWidget) {
-        const origCallback = hardFocusRangeWidget.callback;
-        hardFocusRangeWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (blurStrengthWidget) {
-        const origCallback = blurStrengthWidget.callback;
-        blurStrengthWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [focusDepthWidget, focusRangeWidget, edgeFixWidget, hardFocusRangeWidget, blurStrengthWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
@@ -242,6 +211,74 @@ function setupDOFControls(node) {
             body: JSON.stringify({
                 node_id: node.id,
                 node_type: 'dof',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'dof');
+}
+
+function setupCamDOFControls(node) {
+
+    const focusDepthWidget = findWidgetByName(node, "focus_depth");
+    const focusRangeWidget = findWidgetByName(node, "focus_range");
+    const edgeFixWidget = findWidgetByName(node, "edge_fix");
+    const hardFocusRangeWidget = findWidgetByName(node, "hard_focus_range");
+    const blurStrengthWidget = findWidgetByName(node, "blur_strength");
+    
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget || !blurStrengthWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'cdof',
+                focus_depth: focusDepthWidget.value,
+                focus_range: focusRangeWidget.value,
+                edge_fix: edgeFixWidget.value,
+                hard_focus_range : hardFocusRangeWidget.value,
+                blur_strength : blurStrengthWidget.value
+            })
+        });
+    };
+    
+    [focusDepthWidget, focusRangeWidget, edgeFixWidget, hardFocusRangeWidget, blurStrengthWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'cdof',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'cdof',
                 action: 'skip'
             })
         });
@@ -393,38 +430,15 @@ function setupHighlightShadowControls(node) {
         });
     };
     
-    // Watch for slider changes and send updated params
-    if (shadowWidget) {
-        const origCallback = shadowWidget.callback;
-        shadowWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (highlightWidget) {
-        const origCallback = highlightWidget.callback;
-        highlightWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (midpointWidget) {
-        const origCallback = midpointWidget.callback;
-        midpointWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (featherWidget) {
-        const origCallback = featherWidget.callback;
-        featherWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [shadowWidget, highlightWidget, midpointWidget, featherWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
@@ -480,30 +494,15 @@ function setupMaskFilterControls(node) {
         });
     };
     
-    // Watch for slider changes and send updated params
-    if (areaXWidget) {
-        const origCallback = areaXWidget.callback;
-        areaXWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (areaYWidget) {
-        const origCallback = areaYWidget.callback;
-        areaYWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (keepWidget) {
-        const origCallback = keepWidget.callback;
-        keepWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [areaXWidget, areaYWidget, keepWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
@@ -591,22 +590,15 @@ function setupMaskProcessorControls(node) {
         });
     };
     
-    // Watch for slider changes and send updated params
-    if (dilateErodeWidget) {
-        const origCallback = dilateErodeWidget.callback;
-        dilateErodeWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (featherWidget) {
-        const origCallback = featherWidget.callback;
-        featherWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [dilateErodeWidget, featherWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     // Add "Apply Effect" button
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
@@ -874,84 +866,13 @@ function setupBrightnessControls(node) {
     setupNodeRemovalHandler(node, 'bri');
 }
 
-function setupImageTransformLogic(node) {
-    const resizeByWidget = findWidgetByName(node, "resize_by");
-    const widthWidget = findWidgetByName(node, "width");
-    const heightWidget = findWidgetByName(node, "height");
-    const multiplierWidget = findWidgetByName(node, "multiplier");
-    
-    if (!resizeByWidget) return;
-    
-    const updateVisibility = () => {
-        const resizeBy = resizeByWidget.value;
-        
-        toggleWidget(node, widthWidget, resizeBy);
-        toggleWidget(node, heightWidget, resizeBy);
-        toggleWidget(node, multiplierWidget, !resizeBy);
-        
-        node.setDirtyCanvas(true);
-    };
-    
-    // Initial setup
-    updateVisibility();
-    
-    // Watch for changes using property descriptor
-    let val = resizeByWidget.value;
-    Object.defineProperty(resizeByWidget, 'value', {
-        get() {
-            return val;
-        },
-        set(newVal) {
-            if (newVal !== val) {
-                val = newVal;
-                updateVisibility();
-            }
-        }
-    });
-}
-
-function setupMaskTransformLogic(node) {
-    const resizeByWidget = findWidgetByName(node, "resize_by");
-    const widthWidget = findWidgetByName(node, "width");
-    const heightWidget = findWidgetByName(node, "height");
-    const multiplierWidget = findWidgetByName(node, "multiplier");
-    
-    if (!resizeByWidget) return;
-    
-    const updateVisibility = () => {
-        const resizeBy = resizeByWidget.value;
-        
-        toggleWidget(node, widthWidget, resizeBy);
-        toggleWidget(node, heightWidget, resizeBy);
-        toggleWidget(node, multiplierWidget, !resizeBy);
-        
-        node.setDirtyCanvas(true);
-    };
-    
-    // Initial setup
-    updateVisibility();
-    
-    // Watch for changes using property descriptor
-    let val = resizeByWidget.value;
-    Object.defineProperty(resizeByWidget, 'value', {
-        get() {
-            return val;
-        },
-        set(newVal) {
-            if (newVal !== val) {
-                val = newVal;
-                updateVisibility();
-            }
-        }
-    });
-}
-
 function setupImageTranslationControls(node) {
     const translateXWidget = findWidgetByName(node, "translate_x");
     const translateYWidget = findWidgetByName(node, "translate_y");
+    const bgColorWidget = findWidgetByName(node, "bg_color");
 
     const sendParams = () => {
-        if (!translateXWidget || !translateYWidget) return;
+        if (!translateXWidget || !translateYWidget || !bgColorWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -961,25 +882,20 @@ function setupImageTranslationControls(node) {
                 node_type: 'itr',
                 translate_x: translateXWidget.value,
                 translate_y: translateYWidget.value,
+                bg_color: bgColorWidget.value,
             })
         });
     };
     
-    if (translateXWidget) {
-        const origCallback = translateXWidget.callback;
-        translateXWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (translateYWidget) {
-        const origCallback = translateYWidget.callback;
-        translateYWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [translateXWidget, translateYWidget, bgColorWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1012,9 +928,10 @@ function setupImageRotationControls(node) {
     const rotateWidget = findWidgetByName(node, "rotate");
     const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
+    const bgColorWidget = findWidgetByName(node, "bg_color");
 
     const sendParams = () => {
-        if (!rotateWidget || !interpolationWidget || !fitModeWidget) return;
+        if (!rotateWidget || !interpolationWidget || !fitModeWidget || !bgColorWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1025,33 +942,20 @@ function setupImageRotationControls(node) {
                 rotate: rotateWidget.value,
                 interpolation: interpolationWidget.value,
                 fit_mode: fitModeWidget.value,
+                bg_color: bgColorWidget.value,
             })
         });
     };
     
-    if (rotateWidget) {
-        const origCallback = rotateWidget.callback;
-        rotateWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (interpolationWidget) {
-        const origCallback = interpolationWidget.callback;
-        interpolationWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (fitModeWidget) {
-        const origCallback = fitModeWidget.callback;
-        fitModeWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [rotateWidget, interpolationWidget, fitModeWidget, bgColorWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1083,9 +987,12 @@ function setupImageRotationControls(node) {
 function setupImageZoomControls(node) {
     const zoomWidget = findWidgetByName(node, "zoom");
     const interpolationWidget = findWidgetByName(node, "interpolation");
+    const translateXWidget = findWidgetByName(node, "translate_x");
+    const translateYWidget = findWidgetByName(node, "translate_y");
+    const bgColorWidget = findWidgetByName(node, "bg_color");
 
     const sendParams = () => {
-        if (!zoomWidget || !interpolationWidget) return;
+        if (!zoomWidget || !interpolationWidget || !translateXWidget || !translateYWidget || !bgColorWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1095,25 +1002,22 @@ function setupImageZoomControls(node) {
                 node_type: 'izo',
                 zoom: zoomWidget.value,
                 interpolation: interpolationWidget.value,
+                translate_x: translateXWidget.value,
+                translate_y: translateYWidget.value,
+                bg_color: bgColorWidget.value,
             })
         });
     };
     
-    if (zoomWidget) {
-        const origCallback = zoomWidget.callback;
-        zoomWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (interpolationWidget) {
-        const origCallback = interpolationWidget.callback;
-        interpolationWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [zoomWidget, interpolationWidget, translateXWidget, translateYWidget, bgColorWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1149,9 +1053,10 @@ function setupImageResizeControls(node) {
     const multiplierWidget = findWidgetByName(node, "multiplier");
     const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
+    const bgColorWidget = findWidgetByName(node, "bg_color");
 
     const sendParams = () => {
-        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget) return;
+        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget || !bgColorWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1165,12 +1070,13 @@ function setupImageResizeControls(node) {
                 multiplier: multiplierWidget.value,
                 interpolation: interpolationWidget.value,
                 fit_mode: fitModeWidget.value,
+                bg_color: bgColorWidget.value,
             })
         });
     };
     
     // Watch for changes on all widgets
-    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget].forEach(widget => {
+    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget, bgColorWidget].forEach(widget => {
         if (widget) {
             const origCallback = widget.callback;
             widget.callback = function(value) {
@@ -1210,6 +1116,7 @@ function setupImageResizeControls(node) {
         
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
+        toggleWidget(node, fitModeWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
         
         node.setDirtyCanvas(true);
@@ -1236,9 +1143,10 @@ function setupImageResizeControls(node) {
 function setupMaskTranslationControls(node) {
     const translateXWidget = findWidgetByName(node, "translate_x");
     const translateYWidget = findWidgetByName(node, "translate_y");
+    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
 
     const sendParams = () => {
-        if (!translateXWidget || !translateYWidget) return;
+        if (!translateXWidget || !translateYWidget || !enhancedVisibilityWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1248,25 +1156,20 @@ function setupMaskTranslationControls(node) {
                 node_type: 'mtr',
                 translate_x: translateXWidget.value,
                 translate_y: translateYWidget.value,
+                enhanced_visibility: enhancedVisibilityWidget.value,
             })
         });
     };
     
-    if (translateXWidget) {
-        const origCallback = translateXWidget.callback;
-        translateXWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (translateYWidget) {
-        const origCallback = translateYWidget.callback;
-        translateYWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    [translateXWidget, translateYWidget, enhancedVisibilityWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1299,9 +1202,10 @@ function setupMaskRotationControls(node) {
     const rotateWidget = findWidgetByName(node, "rotate");
     const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
+    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
 
     const sendParams = () => {
-        if (!rotateWidget || !interpolationWidget || !fitModeWidget) return;
+        if (!rotateWidget || !interpolationWidget || !fitModeWidget || !enhancedVisibilityWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1312,33 +1216,21 @@ function setupMaskRotationControls(node) {
                 rotate: rotateWidget.value,
                 interpolation: interpolationWidget.value,
                 fit_mode: fitModeWidget.value,
+                enhanced_visibility: enhancedVisibilityWidget.value,
             })
         });
     };
     
-    if (rotateWidget) {
-        const origCallback = rotateWidget.callback;
-        rotateWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (interpolationWidget) {
-        const origCallback = interpolationWidget.callback;
-        interpolationWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (fitModeWidget) {
-        const origCallback = fitModeWidget.callback;
-        fitModeWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    // Watch for changes on all widgets
+    [rotateWidget, interpolationWidget, fitModeWidget, enhancedVisibilityWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1370,9 +1262,12 @@ function setupMaskRotationControls(node) {
 function setupMaskZoomControls(node) {
     const zoomWidget = findWidgetByName(node, "zoom");
     const interpolationWidget = findWidgetByName(node, "interpolation");
+    const translateXWidget = findWidgetByName(node, "translate_x");
+    const translateYWidget = findWidgetByName(node, "translate_y");
+    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
 
     const sendParams = () => {
-        if (!zoomWidget || !interpolationWidget) return;
+        if (!zoomWidget || !interpolationWidget || !translateXWidget || !translateYWidget || !enhancedVisibilityWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1382,25 +1277,23 @@ function setupMaskZoomControls(node) {
                 node_type: 'mzo',
                 zoom: zoomWidget.value,
                 interpolation: interpolationWidget.value,
+                translate_x: translateXWidget.value,
+                translate_y: translateYWidget.value,
+                enhanced_visibility: enhancedVisibilityWidget.value,
             })
         });
     };
     
-    if (zoomWidget) {
-        const origCallback = zoomWidget.callback;
-        zoomWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-
-    if (interpolationWidget) {
-        const origCallback = interpolationWidget.callback;
-        interpolationWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
+    // Watch for changes on all widgets
+    [zoomWidget, interpolationWidget, translateXWidget, translateYWidget, enhancedVisibilityWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
     
     const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
         fetch('/tgsz_control', {
@@ -1436,9 +1329,10 @@ function setupMaskResizeControls(node) {
     const multiplierWidget = findWidgetByName(node, "multiplier");
     const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
+    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
 
     const sendParams = () => {
-        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget) return;
+        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget || !enhancedVisibilityWidget) return;
         
         fetch('/tgsz_params', {
             method: 'POST',
@@ -1452,12 +1346,13 @@ function setupMaskResizeControls(node) {
                 multiplier: multiplierWidget.value,
                 interpolation: interpolationWidget.value,
                 fit_mode: fitModeWidget.value,
+                enhanced_visibility: enhancedVisibilityWidget.value,
             })
         });
     };
     
     // Watch for changes on all widgets
-    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget].forEach(widget => {
+    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget, enhancedVisibilityWidget].forEach(widget => {
         if (widget) {
             const origCallback = widget.callback;
             widget.callback = function(value) {
@@ -1497,6 +1392,7 @@ function setupMaskResizeControls(node) {
         
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
+        toggleWidget(node, fitModeWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
         
         node.setDirtyCanvas(true);
@@ -1549,6 +1445,10 @@ app.registerExtension({
                 setupDOFControls(node);
                 setupNodeRemovalHandler(node, "dof");
                 break;
+            case "CameraDepthDOF":
+                setupCamDOFControls(node);
+                setupNodeRemovalHandler(node, "cdof");
+                break;
             case "Saturation":
                 setupSaturationControls(node);
                 setupNodeRemovalHandler(node, "sat");
@@ -1585,7 +1485,7 @@ app.registerExtension({
                 setupMaskProcessorControls(node);
                 setupNodeRemovalHandler(node, "mpr");
                 break;
-            case "ImageTranslate":
+            case "ImageTranslation":
                 setupImageTranslationControls(node);
                 setupNodeRemovalHandler(node, "itr");
                 break;
