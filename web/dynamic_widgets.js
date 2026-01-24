@@ -866,6 +866,75 @@ function setupBrightnessControls(node) {
     setupNodeRemovalHandler(node, 'bri');
 }
 
+function setupDitheringControls(node) {
+
+    const ditherMethodWidget = findWidgetByName(node, "dither_method");
+    const rLevelsWidget = findWidgetByName(node, "r_levels");
+    const gLevelsWidget = findWidgetByName(node, "g_levels");
+    const bLevelsWidget = findWidgetByName(node, "b_levels");
+    const ditherScaleWidget = findWidgetByName(node, "dither_scale");
+
+    // Function to send updated parameters to Python
+    const sendParams = () => {
+        if (!ditherMethodWidget || !rLevelsWidget || !gLevelsWidget || !bLevelsWidget || !ditherScaleWidget) return;
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'dit',
+                dither_method: ditherMethodWidget.value,
+                r_levels: rLevelsWidget.value,
+                g_levels: gLevelsWidget.value,
+                b_levels: bLevelsWidget.value,
+                dither_scale: ditherScaleWidget.value,
+            })
+        });
+    };
+    
+    // Watch for slider changes and send updated params
+    [ditherMethodWidget, rLevelsWidget, gLevelsWidget, bLevelsWidget, ditherScaleWidget].forEach(widget => {
+        if (widget) {
+            const origCallback = widget.callback;
+            widget.callback = function(value) {
+                sendParams();
+                if (origCallback) origCallback.call(this, value);
+            };
+        }
+    });
+    
+    // Add "Apply Effect" button
+    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
+        // Create flag file to signal Python to exit loop
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'dit',
+                action: 'apply'
+            })
+        });
+    }, { serialize: false });
+    
+    // Add "Skip Effect" button  
+    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
+        // Create flag file to signal Python to skip effect
+        fetch('/tgsz_control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                node_id: node.id,
+                node_type: 'dit',
+                action: 'skip'
+            })
+        });
+    }, { serialize: false });
+    // Setup node removal handler to cancel on node deletion
+    setupNodeRemovalHandler(node, 'dit');
+}
+
 function setupImageTranslationControls(node) {
     const translateXWidget = findWidgetByName(node, "translate_x");
     const translateYWidget = findWidgetByName(node, "translate_y");
@@ -1516,6 +1585,10 @@ app.registerExtension({
             case "MaskResize":
                 setupMaskResizeControls(node);
                 setupNodeRemovalHandler(node, "mre");
+                break;
+            case "Dither":
+                setupDitheringControls(node);
+                setupNodeRemovalHandler(node, "dit");
                 break;
         }
     }

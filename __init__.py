@@ -29,6 +29,7 @@ SUBMODULES = [
     "sigma.dual_ease_cosine_scheduler",
     "sigma.sigma_visualizer",
     "image.ram_preview_image",
+    "image.dithering",
 ]
 
 # Initialize global mappings
@@ -118,7 +119,11 @@ NODE_HANDLERS = {
     "mtr": {
         "module": ".mask.mask_translation",
         "params": ["translate_x", "translate_y", "enhanced_visibility"]
-    }
+    },
+    "dit": {
+        "module": ".image.dithering",
+        "params": ["dither_method", "r_levels", "g_levels", "b_levels", "dither_scale"]
+    },
 }
 
 # Slider‑parameter route

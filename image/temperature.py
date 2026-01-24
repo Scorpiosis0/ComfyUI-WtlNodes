@@ -129,12 +129,13 @@ class ColorTemperatureC:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "temperature (in Kelvin)": ("FLOAT", {
+                "temperature": ("FLOAT", {
                     "default": 6500.0,
                     "min": 1000.0,
                     "max": 40000.0,
                     "step": 100.0,
                     "round": 0.1,
+                    "display": "temperature (in Kelvin)",
                 }),
                 "apply_type": (["none","auto_apply","apply_all"],),
             },
