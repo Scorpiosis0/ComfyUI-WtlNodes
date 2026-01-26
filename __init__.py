@@ -30,6 +30,7 @@ SUBMODULES = [
     "sigma.sigma_visualizer",
     "image.ram_preview_image",
     "image.dithering",
+    "image.ram_compare",
 ]
 
 # Initialize global mappings
