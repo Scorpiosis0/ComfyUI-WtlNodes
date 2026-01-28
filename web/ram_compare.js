@@ -105,6 +105,36 @@ app.registerExtension({
                 }
             };
 
+            // Helper to save image
+            nodeType.prototype.saveImage = function(imageIndex) {
+                if (!this.compareImagesData || !this.compareImagesData[imageIndex]) {
+                    console.error("No image data available");
+                    return;
+                }
+                
+                const base64Data = this.compareImagesData[imageIndex];
+                const imageName = imageIndex === 0 ? "A" : "B";
+                
+                // Convert base64 to blob
+                const byteCharacters = atob(base64Data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/png' });
+                
+                // Create download link
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `compare_image_${imageName}_${Date.now()}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
             // Helper to update pointer state (like Rgthree)
             nodeType.prototype.setIsPointerDown = function(down) {
                 const newIsDown = down && !!app.canvas.pointer_is_down;
@@ -118,6 +148,24 @@ app.registerExtension({
                         this.setIsPointerDown(down);
                     });
                 }
+            };
+
+            // Add save buttons as widgets
+            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function() {
+                if (onNodeCreated) {
+                    onNodeCreated.apply(this, arguments);
+                }
+                
+                // Add "Save Image A" button
+                const saveButtonA = this.addWidget("button", "💾 Save Image A", null, () => {
+                    this.saveImage(0);
+                }, { serialize: false });
+                
+                // Add "Save Image B" button
+                const saveButtonB = this.addWidget("button", "💾 Save Image B", null, () => {
+                    this.saveImage(1);
+                }, { serialize: false });
             };
 
             // Watch for widget changes
@@ -220,7 +268,7 @@ app.registerExtension({
                 this.updateCompareMode(); // Update mode before drawing
 
                 // Calculate top padding (space for widgets and inputs)
-                const topPadding = 80; // Space for dropdown and inputs
+                const topPadding = 120; // Increased for buttons
                 const sidePadding = 10;
                 const bottomPadding = 10;
 
