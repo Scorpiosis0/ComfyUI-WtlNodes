@@ -2,7 +2,180 @@ import { app } from "../../scripts/app.js";
 
 const HIDDEN_TAG = "tgszhidden";
 
-// Helper
+// ============================================================================
+// NODE CONFIGURATION - All node types and their widget configurations
+// ============================================================================
+const NODE_CONFIGS = {
+    // Empty Latent node with special logic
+    "EmptyLatent": {
+        type: "special",
+        setup: setupEmptyLatentLogic
+    },
+    
+    // Interactive effect nodes with Apply/Skip buttons
+    "DepthDOF": {
+        type: "interactive",
+        nodeType: "dof",
+        widgets: ["focus_depth", "focus_range", "edge_fix", "hard_focus_range", "blur_strength"]
+    },
+    "CameraDepthDOF": {
+        type: "interactive",
+        nodeType: "cdof",
+        widgets: ["focal_point", "focus_falloff", "edge_fix", "focal_plane", "blur_strength"]
+    },
+    "Saturation": {
+        type: "interactive",
+        nodeType: "sat",
+        widgets: ["saturation"]
+    },
+    "Exposure": {
+        type: "interactive",
+        nodeType: "exp",
+        widgets: ["exposure"]
+    },
+    "Contrast": {
+        type: "interactive",
+        nodeType: "con",
+        widgets: ["contrast"]
+    },
+    "Brightness": {
+        type: "interactive",
+        nodeType: "bri",
+        widgets: ["brightness"]
+    },
+    "Temperature": {
+        type: "interactive",
+        nodeType: "tem",
+        widgets: ["temperature"]
+    },
+    "Hue": {
+        type: "interactive",
+        nodeType: "hue",
+        widgets: ["hue"]
+    },
+    "HighlightShadow": {
+        type: "interactive",
+        nodeType: "has",
+        widgets: ["shadow_adjustment", "highlight_adjustment", "midpoint", "feather_radius"]
+    },
+    "MaskProcessor": {
+        type: "interactive",
+        nodeType: "mpr",
+        widgets: ["dilate_erode", "feather"]
+    },
+    "MaskFilter": {
+        type: "interactive",
+        nodeType: "mfl",
+        widgets: ["area_x", "area_y", "keep"],
+        setup: setupMaskFilterVisibility
+    },
+    "Dither": {
+        type: "interactive",
+        nodeType: "dit",
+        widgets: ["dither_method", "r_levels", "g_levels", "b_levels", "dither_scale"]
+    },
+    "ASCII": {
+        type: "interactive",
+        nodeType: "asc",
+        widgets: ["red_weight", "green_weight", "blue_weight", "char_set", "char_size", 
+                  "background", "font_name", "bold", "italic", "spacing"]
+    },
+    "ImageTranslation": {
+        type: "interactive",
+        nodeType: "itr",
+        widgets: ["translate_x", "translate_y", "bg_color"]
+    },
+    "ImageRotation": {
+        type: "interactive",
+        nodeType: "iro",
+        widgets: ["rotate", "interpolation", "fit_mode", "bg_color"]
+    },
+    "ImageZoom": {
+        type: "interactive",
+        nodeType: "izo",
+        widgets: ["zoom", "interpolation", "translate_x", "translate_y", "bg_color"]
+    },
+    "ImageResize": {
+        type: "interactive",
+        nodeType: "ire",
+        widgets: ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode", "bg_color"],
+        setup: setupImageResizeVisibility
+    },
+    "MaskTranslation": {
+        type: "interactive",
+        nodeType: "mtr",
+        widgets: ["translate_x", "translate_y", "enhanced_visibility"]
+    },
+    "MaskRotation": {
+        type: "interactive",
+        nodeType: "mro",
+        widgets: ["rotate", "interpolation", "fit_mode", "enhanced_visibility"]
+    },
+    "MaskZoom": {
+        type: "interactive",
+        nodeType: "mzo",
+        widgets: ["zoom", "interpolation", "translate_x", "translate_y", "enhanced_visibility"]
+    },
+    "MaskResize": {
+        type: "interactive",
+        nodeType: "mre",
+        widgets: ["resize_by", "width", "height", "multiplier", "interpolation", "fit_mode", "enhanced_visibility"],
+        setup: setupMaskResizeVisibility
+    },
+    "FilmGrain": {
+        type: "interactive",
+        nodeType: "fgr",
+        widgets: ["intensity", "grain_size", "monochrome"]
+    },
+    "ChromaticAberration": {
+        type: "interactive",
+        nodeType: "chromatic",
+        widgets: ["offset_x", "offset_y", "red_scale", "blue_scale", "center_x", "center_y", "falloff"]
+    },
+    "FilmArtifacts": {
+        type: "interactive",
+        nodeType: "fil",
+        widgets: ["intensity", "scratch_density", "scratch_max_length", "scratch_max_width", "dust_density", "dust_max_size", "hair_density", "hair_max_length", "light_leak_intensity", "vignette_strength", "seed"]
+    },
+    // NEW: Image Filters node with Apply Again button and conditional sliders
+    "ImageFilters": {
+        type: "interactive",
+        nodeType: "iflt",
+        widgets: ["filter_type", "strength", "edge_threshold", "neon_hue", "neon_blur"],
+        hasApplyAgain: true,
+        setup: setupImageFiltersVisibility
+    },
+    "CRTEffect": {
+        type: "interactive",
+        nodeType: "crt",
+        widgets: ["scanline_intensity", "scanline_width", "curvature", "chromatic_aberration", "halation", "phosphor_dots", "noise", "vignette"]
+    },
+};
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+const findWidgetByName = (node, name) => node.widgets?.find((w) => w.name === name);
+
+function toggleWidget(node, widget, force) {
+    if (!widget) return;
+    
+    widget.options[HIDDEN_TAG] ??= (widget.options.origType = widget.type, widget.options.origComputeSize = widget.computeSize, HIDDEN_TAG);
+    const hide = force ?? (widget.type !== HIDDEN_TAG);
+    
+    widget.type = hide ? widget.options[HIDDEN_TAG] : widget.options.origType;
+    widget.hidden = hide ? true : undefined;
+    widget.computeSize = hide ? () => [0, -3.3] : widget.options.origComputeSize;
+    widget.linkedWidgets?.forEach(w => toggleWidget(node, w, force));
+    
+    for (const el of ["inputEl", "input"])
+        widget[el]?.classList?.toggle(HIDDEN_TAG, force);
+    
+    const height = hide ? node.size[1] : Math.max(node.computeSize()[1], node.size[1]);
+    node.setSize([node.size[0], height]);
+    widget.computedHeight = hide ? 0 : undefined;
+}
 
 function setupNodeRemovalHandler(node, nodeTypeKey) {
     const originalOnRemoved = node.onRemoved;
@@ -10,7 +183,6 @@ function setupNodeRemovalHandler(node, nodeTypeKey) {
     node.onRemoved = function() {
         console.log(`[${node.comfyClass}] Node ${this.id} being removed, sending skip signal`);
         
-        // Send skip signal to Python backend
         fetch('/tgsz_control', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -19,54 +191,256 @@ function setupNodeRemovalHandler(node, nodeTypeKey) {
                 node_type: nodeTypeKey,
                 action: 'skip'
             })
-        }).catch(err => {
-            console.error(`Failed to send skip signal for node ${this.id}:`, err);
-        });
+        }).catch(err => console.error(`Failed to send skip signal for node ${this.id}:`, err));
         
-        // Call original onRemoved if it exists
-        if (originalOnRemoved) {
-            originalOnRemoved.apply(this, arguments);
-        }
+        if (originalOnRemoved) originalOnRemoved.apply(this, arguments);
     };
 }
 
-const findWidgetByName = (node, name) => node.widgets?.find((w) => w.name === name);
+// ============================================================================
+// GENERIC INTERACTIVE NODE SETUP
+// ============================================================================
 
-export function toggleWidget(node, widget, force) {
-    if (!widget) return;
+function setupInteractiveNode(node, config) {
+    const { nodeType, widgets: widgetNames, hasApplyAgain } = config;
     
-    // Store original properties on first call
-    widget.options[HIDDEN_TAG] ??= (widget.options.origType = widget.type, widget.options.origComputeSize = widget.computeSize, HIDDEN_TAG);
+    // Find all widgets
+    const widgets = widgetNames.map(name => findWidgetByName(node, name)).filter(Boolean);
     
-    const hide = force ?? (widget.type !== HIDDEN_TAG);
+    if (widgets.length === 0) return;
     
-    widget.type = hide ? widget.options[HIDDEN_TAG] : widget.options.origType;
+    // Function to send updated parameters
+    const sendParams = () => {
+        const params = { node_id: node.id, node_type: nodeType };
+        widgetNames.forEach((name, i) => {
+            if (widgets[i]) params[name] = widgets[i].value;
+        });
+        
+        fetch('/tgsz_params', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
+    };
     
-    if (hide) {
-        widget.hidden = true;
-    } else {
-        delete widget.hidden;
+    // Attach callbacks to all widgets
+    widgets.forEach(widget => {
+        const origCallback = widget.callback;
+        widget.callback = function(value) {
+            sendParams();
+            // Trigger processing status if available
+            if (node.imageFilterStatus) {
+                node.imageFilterStatus.showProcessing();
+            }
+            if (origCallback) origCallback.call(this, value);
+        };
+    });
+    
+    // Create button container
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px 8px 8px 8px;
+        width: 100%;
+    `;
+    
+    // Helper to create styled button
+    const createStyledButton = (text, action, colors) => {
+        const button = document.createElement("button");
+        button.textContent = text;
+        button.style.cssText = `
+            padding: 4px 8px;
+            background-color: ${colors.bg};
+            color: #ffffff;
+            border: 2px solid #3f3f46;
+            border-radius: 2px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        `;
+        
+        button.addEventListener('mouseenter', () => {
+            button.style.backgroundColor = colors.hover;
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.backgroundColor = colors.bg;
+        });
+        
+        button.addEventListener('mousedown', () => {
+            button.style.backgroundColor = colors.active;
+        });
+        
+        button.addEventListener('mouseup', () => {
+            button.style.backgroundColor = colors.hover;
+        });
+        
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fetch('/tgsz_control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    node_id: node.id,
+                    node_type: nodeType,
+                    action: action
+                })
+            });
+        });
+        
+        return button;
+    };
+    
+    // Add Apply button
+    const applyButton = createStyledButton('✓ Apply Effect', 'apply', {
+        bg: '#52525b',
+        hover: '#86a089',
+        active: '#5a6f5c'
+    });
+    buttonContainer.appendChild(applyButton);
+    
+    // Add Apply Again button ONLY if specified in config
+    if (hasApplyAgain) {
+        const applyAgainButton = createStyledButton('↻ Apply Again', 'apply_again', {
+            bg: '#52525b',
+            hover: '#8b9fc4',
+            active: '#5d7196'
+        });
+        buttonContainer.appendChild(applyAgainButton);
     }
     
-    widget.computeSize = hide ? () => [0, -3.3] : widget.options.origComputeSize;
+    // Add Skip button
+    const skipButton = createStyledButton('× Skip Effect', 'skip', {
+        bg: '#52525b',
+        hover: '#9ca3af',
+        active: '#6b7280'
+    });
+    buttonContainer.appendChild(skipButton);
     
-    widget.linkedWidgets?.forEach(w => toggleWidget(node, w, force));
+    // Add loading status bar
+    const statusBar = document.createElement("div");
+    statusBar.style.cssText = `
+        padding: 4px 8px;
+        background-color: #52525b;
+        color: #ffffff;
+        border: 2px solid #3f3f46;
+        border-radius: 2px;
+        font-size: 11px;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        text-align: center;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+    statusBar.textContent = 'Ready';
+    buttonContainer.appendChild(statusBar);
     
-    for (const el of ["inputEl", "input"])
-        widget[el]?.classList?.toggle(HIDDEN_TAG, force);
+    // Status bar animation helper
+    let statusDotCount = 0;
+    let statusInterval = null;
+    let pollingInterval = null;
     
-    const height = hide ? node.size[1] : Math.max(node.computeSize()[1], node.size[1]);
-    node.setSize([node.size[0], height]);
+    const showProcessing = () => {
+        statusDotCount = 0;
+        statusBar.textContent = 'Processing.';
+        if (statusInterval) clearInterval(statusInterval);
+        statusInterval = setInterval(() => {
+            statusDotCount = (statusDotCount + 1) % 3;
+            statusBar.textContent = 'Processing' + '.'.repeat(statusDotCount + 1);
+        }, 500);
+        
+        // Start polling for completion
+        if (pollingInterval) clearInterval(pollingInterval);
+        pollingInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/tgsz_time/${nodeType}/${node.id}`);
+                const data = await response.json();
+                // Check if processing is complete
+                if (data.status === 'ok' && data.complete === true) {
+                    showDone(data.processing_time_ms);
+                    if (pollingInterval) {
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to poll processing time:', err);
+            }
+        }, 100);  // Poll every 100ms
+    };
     
-    if (hide)
-        widget.computedHeight = 0;
-    else
-        delete widget.computedHeight;
+    const showDone = (ms) => {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        statusBar.textContent = `Done - ${ms}ms`;
+    };
+    
+    const showReady = () => {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        statusBar.textContent = 'Ready';
+    };
+    
+    // Store status functions on node for access from widget callbacks
+    node.imageFilterStatus = { showProcessing, showDone, showReady };
+    
+    // Calculate button count for height
+    // Each button: 4px top padding + ~23px button (with 2px border) + 4px bottom padding = ~31px
+    // Gap between buttons: 4px
+    // Status bar: 22px height + 4px gap
+    // Container padding: 4px top + 8px bottom = 12px
+    const buttonCount = hasApplyAgain ? 3 : 2;
+    const buttonHeight = 31; // Approximate height per button including padding and 2px border
+    const statusBarHeight = 22;
+    const gapHeight = 4;
+    const containerPadding = 12; // 4px top + 8px bottom
+    const containerHeight = containerPadding + (buttonCount * buttonHeight) + ((buttonCount - 1) * gapHeight) + gapHeight + statusBarHeight;
+    
+    // Add the button container as a DOM widget
+    const buttonWidget = node.addDOMWidget("buttons", "custom", buttonContainer, {
+        serialize: false,
+        hideOnZoom: false,
+        getValue() { return null; },
+        setValue(v) {}
+    });
+    
+    // Set computed size so ComfyUI knows how much space this widget takes
+    buttonWidget.computeSize = function(width) {
+        return [width, containerHeight];
+    };
+    
+    // Setup removal handler
+    setupNodeRemovalHandler(node, nodeType);
+    
+    // Call custom setup if provided
+    if (config.setup) {
+        config.setup(node);
+    }
 }
 
-//Widget logic
-function setupEmptyLatentLogic(node) {
+// ============================================================================
+// SPECIAL NODE SETUPS (nodes with unique visibility logic)
+// ============================================================================
 
+function setupEmptyLatentLogic(node) {
     const useRatioWidget = findWidgetByName(node, "use_ratio");
     const widthWidget = findWidgetByName(node, "width");
     const heightWidget = findWidgetByName(node, "height");
@@ -75,7 +449,6 @@ function setupEmptyLatentLogic(node) {
     
     if (!useRatioWidget) return;
     
-    // Resolution options for each ratio (must match Python RESOLUTIONS dict)
     const RESOLUTIONS = {
         "1:1": ["512x512","768x768","1024x1024","1536x1536","2048x2048"],
         "3:2": ["960x640","1152x768","1344x896","1536x1024","1728x1152","1920x1280"],
@@ -89,45 +462,30 @@ function setupEmptyLatentLogic(node) {
     
     const updateResolutionOptions = () => {
         if (!ratioWidget || !resolutionWidget) return;
-        
         const selectedRatio = ratioWidget.value;
         const newOptions = RESOLUTIONS[selectedRatio] || ["1024x1024"];
-        
-        // Update the widget's options
         resolutionWidget.options.values = newOptions;
-        
-        // Reset to first option if current value isn't in new options
         if (!newOptions.includes(resolutionWidget.value)) {
             resolutionWidget.value = newOptions[0];
         }
-        
-        // Force widget to redraw
-        if (resolutionWidget.callback) {
-            resolutionWidget.callback(resolutionWidget.value);
-        }
+        if (resolutionWidget.callback) resolutionWidget.callback(resolutionWidget.value);
     };
     
     const updateVisibility = () => {
         const useRatio = useRatioWidget.value;
-        
         toggleWidget(node, widthWidget, useRatio);
         toggleWidget(node, heightWidget, useRatio);
         toggleWidget(node, ratioWidget, !useRatio);
         toggleWidget(node, resolutionWidget, !useRatio);
-        
         node.setDirtyCanvas(true);
     };
     
-    // Initial setup
     updateVisibility();
     updateResolutionOptions();
     
-    // Watch for use_ratio changes
     let val = useRatioWidget.value;
     Object.defineProperty(useRatioWidget, 'value', {
-        get() {
-            return val;
-        },
+        get() { return val; },
         set(newVal) {
             if (newVal !== val) {
                 val = newVal;
@@ -136,12 +494,9 @@ function setupEmptyLatentLogic(node) {
         }
     });
     
-    // Watch for ratio changes to update resolution dropdown
     let ratioVal = ratioWidget.value;
     Object.defineProperty(ratioWidget, 'value', {
-        get() {
-            return ratioVal;
-        },
+        get() { return ratioVal; },
         set(newVal) {
             if (newVal !== ratioVal) {
                 ratioVal = newVal;
@@ -151,1043 +506,47 @@ function setupEmptyLatentLogic(node) {
     });
 }
 
-function setupDOFControls(node) {
-
-    const focusDepthWidget = findWidgetByName(node, "focus_depth");
-    const focusRangeWidget = findWidgetByName(node, "focus_range");
-    const edgeFixWidget = findWidgetByName(node, "edge_fix");
-    const hardFocusRangeWidget = findWidgetByName(node, "hard_focus_range");
-    const blurStrengthWidget = findWidgetByName(node, "blur_strength");
-    
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget || !blurStrengthWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dof',
-                focus_depth: focusDepthWidget.value,
-                focus_range: focusRangeWidget.value,
-                edge_fix: edgeFixWidget.value,
-                hard_focus_range : hardFocusRangeWidget.value,
-                blur_strength : blurStrengthWidget.value
-            })
-        });
-    };
-    
-    [focusDepthWidget, focusRangeWidget, edgeFixWidget, hardFocusRangeWidget, blurStrengthWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dof',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dof',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'dof');
-}
-
-function setupCamDOFControls(node) {
-
-    const focusDepthWidget = findWidgetByName(node, "focus_depth");
-    const focusRangeWidget = findWidgetByName(node, "focus_range");
-    const edgeFixWidget = findWidgetByName(node, "edge_fix");
-    const hardFocusRangeWidget = findWidgetByName(node, "hard_focus_range");
-    const blurStrengthWidget = findWidgetByName(node, "blur_strength");
-    
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!focusDepthWidget || !focusRangeWidget || !edgeFixWidget || !hardFocusRangeWidget || !blurStrengthWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'cdof',
-                focus_depth: focusDepthWidget.value,
-                focus_range: focusRangeWidget.value,
-                edge_fix: edgeFixWidget.value,
-                hard_focus_range : hardFocusRangeWidget.value,
-                blur_strength : blurStrengthWidget.value
-            })
-        });
-    };
-    
-    [focusDepthWidget, focusRangeWidget, edgeFixWidget, hardFocusRangeWidget, blurStrengthWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'cdof',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'cdof',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'dof');
-}
-
-function setupSaturationControls(node) {
-
-    const saturationWidget = findWidgetByName(node, "saturation");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!saturationWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'sat',
-                saturation: saturationWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (saturationWidget) {
-        const origCallback = saturationWidget.callback;
-        saturationWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'sat',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'sat',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'sat');
-}
-
-function setupExposureControls(node) {
-
-    const exposureWidget = findWidgetByName(node, "exposure");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!exposureWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'exp',
-                exposure: exposureWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (exposureWidget) {
-        const origCallback = exposureWidget.callback;
-        exposureWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'exp',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'exp',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'exp');
-}
-
-function setupHighlightShadowControls(node) {
-
-    const shadowWidget = findWidgetByName(node, "shadow_adjustment");
-    const highlightWidget = findWidgetByName(node, "highlight_adjustment");
-    const midpointWidget = findWidgetByName(node, "midpoint");
-    const featherWidget = findWidgetByName(node, "feather_radius");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!shadowWidget || !highlightWidget || !midpointWidget || !featherWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'has',
-                shadow_adjustment: shadowWidget.value,
-                highlight_adjustment: highlightWidget.value,
-                midpoint: midpointWidget.value,
-                feather_radius: featherWidget.value,
-            })
-        });
-    };
-    
-    [shadowWidget, highlightWidget, midpointWidget, featherWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'has',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'has',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'exp');
-}
-
-function setupMaskFilterControls(node) {
-
-    const areaXWidget = findWidgetByName(node, "area_x");
+function setupMaskFilterVisibility(node) {
     const areaYWidget = findWidgetByName(node, "area_y");
     const keepWidget = findWidgetByName(node, "keep");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!areaXWidget || !areaYWidget || !keepWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mfl',
-                area_x: areaXWidget.value,
-                area_y: areaYWidget.value,
-                keep: keepWidget.value
-            })
-        });
-    };
     
-    [areaXWidget, areaYWidget, keepWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mfl',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mfl',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-
-    // --- Widget visibility logic ---
     const updateKeepVisibility = () => {
         if (!keepWidget) return;
-        
         const shouldShow = keepWidget.value !== "between_x_y";
         toggleWidget(node, areaYWidget, shouldShow);
         node.setDirtyCanvas(true);
     };
-
-    // Initial visibility update
+    
     updateKeepVisibility();
-
-    // Watch for value changes on keepWidget
+    
     if (keepWidget) {
         let keepVal = keepWidget.value;
-
         Object.defineProperty(keepWidget, "value", {
-            get() {
-                return keepVal;
-            },
+            get() { return keepVal; },
             set(newVal) {
                 if (newVal !== keepVal) {
                     keepVal = newVal;
-
-                    // Update visibility dynamically
                     updateKeepVisibility();
-
-                    // Call original callback
-                    if (keepWidget.callback)
-                        keepWidget.callback.call(this, newVal);
+                    if (keepWidget.callback) keepWidget.callback.call(this, newVal);
                 }
             }
         });
     }
-    
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'mpr');
 }
 
-function setupMaskProcessorControls(node) {
-
-    const dilateErodeWidget = findWidgetByName(node, "dilate_erode");
-    const featherWidget = findWidgetByName(node, "feather");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!dilateErodeWidget || !featherWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mpr',
-                dilate_erode: dilateErodeWidget.value,
-                feather: featherWidget.value,
-            })
-        });
-    };
-    
-    [dilateErodeWidget, featherWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mpr',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mpr',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'mpr');
-}
-
-function setupHueControls(node) {
-
-    const hueWidget = findWidgetByName(node, "hue");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!hueWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'hue',
-                hue: hueWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (hueWidget) {
-        const origCallback = hueWidget.callback;
-        hueWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'hue',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'hue',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'hue');
-}
-
-function setupContrastControls(node) {
-
-    const contrastWidget = findWidgetByName(node, "contrast");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!contrastWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'con',
-                contrast: contrastWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (contrastWidget) {
-        const origCallback = contrastWidget.callback;
-        contrastWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'con',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'con',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'con');
-}
-
-function setupTemperatureControls(node) {
-
-    const temperatureWidget = findWidgetByName(node, "temperature");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!temperatureWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'tem',
-                temperature: temperatureWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (temperatureWidget) {
-        const origCallback = temperatureWidget.callback;
-        temperatureWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'tem',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'tem',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'tem');
-}
-
-function setupBrightnessControls(node) {
-
-    const brightnessWidget = findWidgetByName(node, "brightness");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!brightnessWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'bri',
-                brightness: brightnessWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    if (brightnessWidget) {
-        const origCallback = brightnessWidget.callback;
-        brightnessWidget.callback = function(value) {
-            sendParams();
-            if (origCallback) origCallback.call(this, value);
-        };
-    }
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'bri',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'bri',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'bri');
-}
-
-function setupDitheringControls(node) {
-
-    const ditherMethodWidget = findWidgetByName(node, "dither_method");
-    const rLevelsWidget = findWidgetByName(node, "r_levels");
-    const gLevelsWidget = findWidgetByName(node, "g_levels");
-    const bLevelsWidget = findWidgetByName(node, "b_levels");
-    const ditherScaleWidget = findWidgetByName(node, "dither_scale");
-
-    // Function to send updated parameters to Python
-    const sendParams = () => {
-        if (!ditherMethodWidget || !rLevelsWidget || !gLevelsWidget || !bLevelsWidget || !ditherScaleWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dit',
-                dither_method: ditherMethodWidget.value,
-                r_levels: rLevelsWidget.value,
-                g_levels: gLevelsWidget.value,
-                b_levels: bLevelsWidget.value,
-                dither_scale: ditherScaleWidget.value,
-            })
-        });
-    };
-    
-    // Watch for slider changes and send updated params
-    [ditherMethodWidget, rLevelsWidget, gLevelsWidget, bLevelsWidget, ditherScaleWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    // Add "Apply Effect" button
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        // Create flag file to signal Python to exit loop
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dit',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    // Add "Skip Effect" button  
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        // Create flag file to signal Python to skip effect
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'dit',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    // Setup node removal handler to cancel on node deletion
-    setupNodeRemovalHandler(node, 'dit');
-}
-
-function setupImageTranslationControls(node) {
-    const translateXWidget = findWidgetByName(node, "translate_x");
-    const translateYWidget = findWidgetByName(node, "translate_y");
-    const bgColorWidget = findWidgetByName(node, "bg_color");
-
-    const sendParams = () => {
-        if (!translateXWidget || !translateYWidget || !bgColorWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'itr',
-                translate_x: translateXWidget.value,
-                translate_y: translateYWidget.value,
-                bg_color: bgColorWidget.value,
-            })
-        });
-    };
-    
-    [translateXWidget, translateYWidget, bgColorWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'itr',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'itr',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'itr');
-}
-
-function setupImageRotationControls(node) {
-    const rotateWidget = findWidgetByName(node, "rotate");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
-    const fitModeWidget = findWidgetByName(node, "fit_mode");
-    const bgColorWidget = findWidgetByName(node, "bg_color");
-
-    const sendParams = () => {
-        if (!rotateWidget || !interpolationWidget || !fitModeWidget || !bgColorWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'iro',
-                rotate: rotateWidget.value,
-                interpolation: interpolationWidget.value,
-                fit_mode: fitModeWidget.value,
-                bg_color: bgColorWidget.value,
-            })
-        });
-    };
-    
-    [rotateWidget, interpolationWidget, fitModeWidget, bgColorWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'iro',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'iro',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'iro');
-}
-
-function setupImageZoomControls(node) {
-    const zoomWidget = findWidgetByName(node, "zoom");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
-    const translateXWidget = findWidgetByName(node, "translate_x");
-    const translateYWidget = findWidgetByName(node, "translate_y");
-    const bgColorWidget = findWidgetByName(node, "bg_color");
-
-    const sendParams = () => {
-        if (!zoomWidget || !interpolationWidget || !translateXWidget || !translateYWidget || !bgColorWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'izo',
-                zoom: zoomWidget.value,
-                interpolation: interpolationWidget.value,
-                translate_x: translateXWidget.value,
-                translate_y: translateYWidget.value,
-                bg_color: bgColorWidget.value,
-            })
-        });
-    };
-    
-    [zoomWidget, interpolationWidget, translateXWidget, translateYWidget, bgColorWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'izo',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'izo',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'izo');
-}
-
-function setupImageResizeControls(node) {
+function setupImageResizeVisibility(node) {
     const resizeByWidget = findWidgetByName(node, "resize_by");
     const widthWidget = findWidgetByName(node, "width");
     const heightWidget = findWidgetByName(node, "height");
-    const multiplierWidget = findWidgetByName(node, "multiplier");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
-    const bgColorWidget = findWidgetByName(node, "bg_color");
-
-    const sendParams = () => {
-        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget || !bgColorWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'ire',
-                resize_by: resizeByWidget.value,
-                width: widthWidget.value,
-                height: heightWidget.value,
-                multiplier: multiplierWidget.value,
-                interpolation: interpolationWidget.value,
-                fit_mode: fitModeWidget.value,
-                bg_color: bgColorWidget.value,
-            })
-        });
-    };
+    const multiplierWidget = findWidgetByName(node, "multiplier");
     
-    // Watch for changes on all widgets
-    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget, bgColorWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'ire',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'ire',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    // Widget visibility logic
     const updateVisibility = () => {
         const resizeBy = resizeByWidget.value;
-        
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
         toggleWidget(node, fitModeWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
-        
         node.setDirtyCanvas(true);
     };
     
@@ -1195,9 +554,7 @@ function setupImageResizeControls(node) {
     
     let val = resizeByWidget.value;
     Object.defineProperty(resizeByWidget, 'value', {
-        get() {
-            return val;
-        },
+        get() { return val; },
         set(newVal) {
             if (newVal !== val) {
                 val = newVal;
@@ -1205,265 +562,21 @@ function setupImageResizeControls(node) {
             }
         }
     });
-    
-    setupNodeRemovalHandler(node, 'ire');
 }
 
-function setupMaskTranslationControls(node) {
-    const translateXWidget = findWidgetByName(node, "translate_x");
-    const translateYWidget = findWidgetByName(node, "translate_y");
-    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
-
-    const sendParams = () => {
-        if (!translateXWidget || !translateYWidget || !enhancedVisibilityWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mtr',
-                translate_x: translateXWidget.value,
-                translate_y: translateYWidget.value,
-                enhanced_visibility: enhancedVisibilityWidget.value,
-            })
-        });
-    };
-    
-    [translateXWidget, translateYWidget, enhancedVisibilityWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mtr',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mtr',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'mtr');
-}
-
-function setupMaskRotationControls(node) {
-    const rotateWidget = findWidgetByName(node, "rotate");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
-    const fitModeWidget = findWidgetByName(node, "fit_mode");
-    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
-
-    const sendParams = () => {
-        if (!rotateWidget || !interpolationWidget || !fitModeWidget || !enhancedVisibilityWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mro',
-                rotate: rotateWidget.value,
-                interpolation: interpolationWidget.value,
-                fit_mode: fitModeWidget.value,
-                enhanced_visibility: enhancedVisibilityWidget.value,
-            })
-        });
-    };
-    
-    // Watch for changes on all widgets
-    [rotateWidget, interpolationWidget, fitModeWidget, enhancedVisibilityWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mro',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mro',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'mro');
-}
-
-function setupMaskZoomControls(node) {
-    const zoomWidget = findWidgetByName(node, "zoom");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
-    const translateXWidget = findWidgetByName(node, "translate_x");
-    const translateYWidget = findWidgetByName(node, "translate_y");
-    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
-
-    const sendParams = () => {
-        if (!zoomWidget || !interpolationWidget || !translateXWidget || !translateYWidget || !enhancedVisibilityWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mzo',
-                zoom: zoomWidget.value,
-                interpolation: interpolationWidget.value,
-                translate_x: translateXWidget.value,
-                translate_y: translateYWidget.value,
-                enhanced_visibility: enhancedVisibilityWidget.value,
-            })
-        });
-    };
-    
-    // Watch for changes on all widgets
-    [zoomWidget, interpolationWidget, translateXWidget, translateYWidget, enhancedVisibilityWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mzo',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mzo',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    setupNodeRemovalHandler(node, 'mzo');
-}
-
-function setupMaskResizeControls(node) {
+function setupMaskResizeVisibility(node) {
     const resizeByWidget = findWidgetByName(node, "resize_by");
     const widthWidget = findWidgetByName(node, "width");
     const heightWidget = findWidgetByName(node, "height");
-    const multiplierWidget = findWidgetByName(node, "multiplier");
-    const interpolationWidget = findWidgetByName(node, "interpolation");
     const fitModeWidget = findWidgetByName(node, "fit_mode");
-    const enhancedVisibilityWidget = findWidgetByName(node, "enhanced_visibility");
-
-    const sendParams = () => {
-        if (!resizeByWidget || !widthWidget || !heightWidget || !multiplierWidget || !interpolationWidget || !fitModeWidget || !enhancedVisibilityWidget) return;
-        
-        fetch('/tgsz_params', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mre',
-                resize_by: resizeByWidget.value,
-                width: widthWidget.value,
-                height: heightWidget.value,
-                multiplier: multiplierWidget.value,
-                interpolation: interpolationWidget.value,
-                fit_mode: fitModeWidget.value,
-                enhanced_visibility: enhancedVisibilityWidget.value,
-            })
-        });
-    };
+    const multiplierWidget = findWidgetByName(node, "multiplier");
     
-    // Watch for changes on all widgets
-    [resizeByWidget, widthWidget, heightWidget, multiplierWidget, interpolationWidget, fitModeWidget, enhancedVisibilityWidget].forEach(widget => {
-        if (widget) {
-            const origCallback = widget.callback;
-            widget.callback = function(value) {
-                sendParams();
-                if (origCallback) origCallback.call(this, value);
-            };
-        }
-    });
-    
-    const applyButton = node.addWidget("button", "✅ Apply Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mre',
-                action: 'apply'
-            })
-        });
-    }, { serialize: false });
-    
-    const skipButton = node.addWidget("button", "⏭️ Skip Effect", null, () => {
-        fetch('/tgsz_control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                node_id: node.id,
-                node_type: 'mre',
-                action: 'skip'
-            })
-        });
-    }, { serialize: false });
-    
-    // Widget visibility logic
     const updateVisibility = () => {
         const resizeBy = resizeByWidget.value;
-        
         toggleWidget(node, widthWidget, resizeBy);
         toggleWidget(node, heightWidget, resizeBy);
         toggleWidget(node, fitModeWidget, resizeBy);
         toggleWidget(node, multiplierWidget, !resizeBy);
-        
         node.setDirtyCanvas(true);
     };
     
@@ -1471,9 +584,7 @@ function setupMaskResizeControls(node) {
     
     let val = resizeByWidget.value;
     Object.defineProperty(resizeByWidget, 'value', {
-        get() {
-            return val;
-        },
+        get() { return val; },
         set(newVal) {
             if (newVal !== val) {
                 val = newVal;
@@ -1481,115 +592,139 @@ function setupMaskResizeControls(node) {
             }
         }
     });
-    
-    setupNodeRemovalHandler(node, 'mre');
 }
 
-// Register
+function setupImageFiltersVisibility(node) {
+    const filterTypeWidget = findWidgetByName(node, "filter_type");
+    const edgeThresholdWidget = findWidgetByName(node, "edge_threshold");
+    const neonHueWidget = findWidgetByName(node, "neon_hue");
+    const neonBlurWidget = findWidgetByName(node, "neon_blur");
+    
+    const updateVisibility = () => {
+        const filterType = filterTypeWidget.value;
+        
+        // Show edge_threshold for cartoon and neon
+        const showEdgeThreshold = (filterType === "cartoon" || filterType === "neon");
+        toggleWidget(node, edgeThresholdWidget, !showEdgeThreshold);
+        
+        // Show neon_hue and neon_blur only for neon
+        const showNeonParams = (filterType === "neon");
+        toggleWidget(node, neonHueWidget, !showNeonParams);
+        toggleWidget(node, neonBlurWidget, !showNeonParams);
+        
+        node.setDirtyCanvas(true);
+    };
+    
+    updateVisibility();
+    
+    let val = filterTypeWidget.value;
+    Object.defineProperty(filterTypeWidget, 'value', {
+        get() { return val; },
+        set(newVal) {
+            if (newVal !== val) {
+                val = newVal;
+                updateVisibility();
+            }
+        }
+    });
+}
+
+// ============================================================================
+// REGISTER EXTENSION
+// ============================================================================
+
 app.registerExtension({
     name: "Comfy.TgszNodes.DynamicWidgets",
     
     async init() {
-        // Add CSS for hiding widgets
         const style = document.createElement("style");
-        style.textContent = `.${HIDDEN_TAG} {display: none !important;}`;
+        style.textContent = `
+            .${HIDDEN_TAG} {
+                display: none !important;
+            }
+            
+            /* Target ComfyUI button widgets specifically */
+            button.tgsz-button,
+            input[type="button"].tgsz-button {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                padding: 8px 16px !important;
+                border-radius: 4px !important;
+                cursor: pointer !important;
+                transition: background-color 0.15s ease, border-color 0.15s ease !important;
+                outline: none !important;
+                letter-spacing: 0.01em !important;
+                background-color: #52525b !important;
+                border: 2px solid #3f3f46 !important;
+                color: #ffffff !important;
+            }
+            
+            /* Apply Button - Subtle Green on hover/active */
+            button.tgsz-apply:hover,
+            input[type="button"].tgsz-apply:hover {
+                background-color: #86a089 !important;
+                border-color: #5a6f5c !important;
+            }
+            
+            button.tgsz-apply:active,
+            input[type="button"].tgsz-apply:active {
+                background-color: #5a6f5c !important;
+                border-color: #3d4a3e !important;
+            }
+            
+            /* Apply Again Button - Subtle Blue on hover/active */
+            button.tgsz-apply-again:hover,
+            input[type="button"].tgsz-apply-again:hover {
+                background-color: #8b9fc4 !important;
+                border-color: #5d7196 !important;
+            }
+            
+            button.tgsz-apply-again:active,
+            input[type="button"].tgsz-apply-again:active {
+                background-color: #5d7196 !important;
+                border-color: #3e4d64 !important;
+            }
+            
+            /* Skip Button - Subtle Gray on hover/active */
+            button.tgsz-skip:hover,
+            input[type="button"].tgsz-skip:hover {
+                background-color: #9ca3af !important;
+                border-color: #6b7280 !important;
+            }
+            
+            button.tgsz-skip:active,
+            input[type="button"].tgsz-skip:active {
+                background-color: #6b7280 !important;
+                border-color: #4b5563 !important;
+            }
+            
+            /* Button Icons */
+            .tgsz-button-icon {
+                display: inline-block;
+                margin-right: 6px;
+                font-size: 14px;
+                vertical-align: middle;
+            }
+            
+            /* Fix skip emoji vertical alignment */
+            .tgsz-skip .tgsz-button-icon {
+                position: relative;
+                top: -1px;
+            }
+        `;
         document.head.appendChild(style);
     },
     
     async nodeCreated(node) {
-        const nodeType = node.comfyClass;
+        const config = NODE_CONFIGS[node.comfyClass];
         
-        // Setup logic based on node type
-        switch(nodeType) {
-            case "EmptyLatent":
-                setupEmptyLatentLogic(node);
-                break;
-            case "ImageTransform":
-                setupImageTransformLogic(node);
-                break;
-            case "MaskTransform":
-                setupMaskTransformLogic(node);
-                break;
-            case "DepthDOF":
-                setupDOFControls(node);
-                setupNodeRemovalHandler(node, "dof");
-                break;
-            case "CameraDepthDOF":
-                setupCamDOFControls(node);
-                setupNodeRemovalHandler(node, "cdof");
-                break;
-            case "Saturation":
-                setupSaturationControls(node);
-                setupNodeRemovalHandler(node, "sat");
-                break;
-            case "Exposure":
-                setupExposureControls(node);
-                setupNodeRemovalHandler(node, "exp");
-                break;
-            case "Contrast":
-                setupContrastControls(node);
-                setupNodeRemovalHandler(node, "con");
-                break;
-            case "Brightness":
-                setupBrightnessControls(node);
-                setupNodeRemovalHandler(node, "bri");
-                break;
-            case "Temperature":
-                setupTemperatureControls(node);
-                setupNodeRemovalHandler(node, "tem");
-                break;
-            case "Hue":
-                setupHueControls(node);
-                setupNodeRemovalHandler(node, "hue");
-                break;
-            case "MaskFilter":
-                setupMaskFilterControls(node);
-                setupNodeRemovalHandler(node, "mfl");
-                break;
-            case "HighlightShadow":
-                setupHighlightShadowControls(node);
-                setupNodeRemovalHandler(node, "has");
-                break;
-            case "MaskProcessor":
-                setupMaskProcessorControls(node);
-                setupNodeRemovalHandler(node, "mpr");
-                break;
-            case "ImageTranslation":
-                setupImageTranslationControls(node);
-                setupNodeRemovalHandler(node, "itr");
-                break;
-            case "ImageRotation":
-                setupImageRotationControls(node);
-                setupNodeRemovalHandler(node, "iro");
-                break;
-            case "ImageZoom":
-                setupImageZoomControls(node);
-                setupNodeRemovalHandler(node, "izo");
-                break;
-            case "ImageResize":
-                setupImageResizeControls(node);
-                setupNodeRemovalHandler(node, "ire");
-                break;
-            case "MaskTranslation":
-                setupMaskTranslationControls(node);
-                setupNodeRemovalHandler(node, "mtr");
-                break;
-            case "MaskRotation":
-                setupMaskRotationControls(node);
-                setupNodeRemovalHandler(node, "mro");
-                break;
-            case "MaskZoom":
-                setupMaskZoomControls(node);
-                setupNodeRemovalHandler(node, "mzo");
-                break;
-            case "MaskResize":
-                setupMaskResizeControls(node);
-                setupNodeRemovalHandler(node, "mre");
-                break;
-            case "Dither":
-                setupDitheringControls(node);
-                setupNodeRemovalHandler(node, "dit");
-                break;
+        if (!config) return;
+        
+        if (config.type === "interactive") {
+            setupInteractiveNode(node, config);
+        } else if (config.type === "special" && config.setup) {
+            config.setup(node);
         }
     }
 });

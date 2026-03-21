@@ -11,12 +11,37 @@ _CONTROL_LOCK = threading.Lock()
 def _set_params(node_id: str, translate_x: int, translate_y: int, enhanced_visibility: bool) -> None:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = (translate_x, translate_y, enhanced_visibility)
+        new_params = (translate_x, translate_y, enhanced_visibility)
+        if entry.get("params") != new_params:
+            entry["params"] = new_params
+            entry["params_changed"] = True
+            entry["processing_complete"] = False
 
 def _get_params(node_id: str, translate_x: int, translate_y: int, enhanced_visibility: bool) -> tuple[int, int, bool]:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
         return entry.get("params", (translate_x, translate_y, enhanced_visibility))
+
+def _check_and_clear_params_changed(node_id: str) -> bool:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.get(node_id)
+        if not entry:
+            return False
+        if entry.get("params_changed"):
+            entry["params_changed"] = False
+            return True
+        return False
+
+def _set_processing_time(node_id: str, ms: int) -> None:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.setdefault(node_id, {})
+        entry["processing_time_ms"] = ms
+        entry["processing_complete"] = True
+
+def _get_processing_time(node_id: str) -> tuple:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.get(node_id, {})
+        return (entry.get("processing_time_ms", 0), entry.get("processing_complete", False))
 
 def _set_flag(node_id: str, flag: str) -> None:
     with _CONTROL_LOCK:
@@ -41,81 +66,54 @@ def _clear_all(node_id: str) -> None:
 
 def apply_translation(mask, tx, ty):
     mask_np = mask.cpu().numpy()
-    batch_size = mask_np.shape[0]
     results = []
-    
-    for b in range(batch_size):
+
+    for b in range(mask_np.shape[0]):
         m = mask_np[b]
         h, w = m.shape[:2]
-        
         mask_uint8 = (m * 255).astype(np.uint8)
-        translation_matrix = np.float32([[1, 0, tx], [0, 1, ty]])
-        translated = cv2.warpAffine(mask_uint8, translation_matrix, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
-        
-        mask_float = translated.astype(np.float32) / 255.0
-        results.append(mask_float)
-    
-    output = torch.from_numpy(np.stack(results)).float()
-    return output
+        M = np.float32([[1, 0, tx], [0, 1, ty]])
+        translated = cv2.warpAffine(mask_uint8, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+        results.append(translated.astype(np.float32) / 255.0)
+
+    return torch.from_numpy(np.stack(results)).float()
 
 def apply_translation_preview(mask, tx, ty, enhanced_visibility):
     mask_np = mask.cpu().numpy()
-    batch_size = mask_np.shape[0]
     results = []
-    
-    for b in range(batch_size):
+
+    for b in range(mask_np.shape[0]):
         m = mask_np[b]
         h, w = m.shape[:2]
-        
         mask_uint8 = (m * 255).astype(np.uint8)
-        translation_matrix = np.float32([[1, 0, tx], [0, 1, ty]])
-        translated = cv2.warpAffine(mask_uint8, translation_matrix, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
-        
-        # Validity mask for padding detection
+        M = np.float32([[1, 0, tx], [0, 1, ty]])
+        translated = cv2.warpAffine(mask_uint8, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+
         ones = np.ones_like(mask_uint8, dtype=np.uint8) * 255
-        valid = cv2.warpAffine(ones, translation_matrix, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        
-        # Convert to RGB
+        valid = cv2.warpAffine(ones, M, (w, h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
         rgb = cv2.cvtColor(translated, cv2.COLOR_GRAY2RGB)
-        
-        # Highlight padding in red if enhanced visibility is on
         if enhanced_visibility:
-            red_bg = np.array([255, 0, 0], dtype=np.uint8)
-            padding_pixels = (valid == 0)
-            rgb[padding_pixels] = red_bg
-        
+            rgb[valid == 0] = np.array([255, 0, 0], dtype=np.uint8)
+
         results.append(rgb.astype(np.float32) / 255.0)
-    
-    output = torch.from_numpy(np.stack(results)).float()
-    return output
+
+    return torch.from_numpy(np.stack(results)).float()
 
 class MaskTranslationC:
-    
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "mask": ("MASK",),
-                "translate_x": ("INT", {
-                    "default": 0,
-                    "min": -4096,
-                    "max": 4096,
-                    "step": 1
-                }),
-                "translate_y": ("INT", {
-                    "default": 0,
-                    "min": -4096,
-                    "max": 4096,
-                    "step": 1
-                }),
+                "translate_x": ("INT", {"default": 0, "min": -4096, "max": 4096, "step": 1}),
+                "translate_y": ("INT", {"default": 0, "min": -4096, "max": 4096, "step": 1}),
                 "enhanced_visibility": ("BOOLEAN", {"default": False}),
                 "apply_type": (["none", "auto_apply", "apply_all"],),
             },
-            "hidden": {
-                "unique_id": "UNIQUE_ID",
-            },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
-    
+
     RETURN_TYPES = ("MASK",)
     FUNCTION = "translate"
     CATEGORY = "WtlNodes/mask"
@@ -127,28 +125,40 @@ class MaskTranslationC:
 
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             return {"result": (mask,)}
-        
+
         if unique_id and not apply_type == "auto_apply":
             uid = str(unique_id)
 
             if apply_type == "apply_all":
-                while True:
-                    cur_tx, cur_ty, cur_enh = _get_params(uid, translate_x, translate_y, enhanced_visibility)
-                    
-                    # PREVIEW (RED/BLACK)
-                    preview_image = apply_translation_preview(mask, cur_tx, cur_ty, cur_enh)
-                    _send_ram_preview(preview_image, uid)
+                cur_tx, cur_ty, cur_enh = _get_params(uid, translate_x, translate_y, enhanced_visibility)
+                start_time = time.time()
+                preview = apply_translation_preview(mask, cur_tx, cur_ty, cur_enh)
+                _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                _send_ram_preview(preview, uid)
 
-                    if _check_and_clear_flag(uid, "apply"):
-                        translate_x, translate_y, enhanced_visibility = cur_tx, cur_ty, cur_enh
+                while True:
+                    triggered = False
+                    while not triggered:
+                        if _check_and_clear_params_changed(uid):
+                            triggered = True
+                            break
+                        if _check_and_clear_flag(uid, "apply"):
+                            final_tx, final_ty, _ = _get_params(uid, translate_x, translate_y, enhanced_visibility)
+                            break
+                        if _check_and_clear_flag(uid, "skip"):
+                            return {"result": (mask,)}
+                        time.sleep(0.05)
+
+                    if not triggered:
                         break
 
-                    if _check_and_clear_flag(uid, "skip"):
-                        return {"result": (mask,)}
-                    
-                    time.sleep(0.25)
+                    cur_tx, cur_ty, cur_enh = _get_params(uid, translate_x, translate_y, enhanced_visibility)
+                    start_time = time.time()
+                    preview = apply_translation_preview(mask, cur_tx, cur_ty, cur_enh)
+                    _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                    _send_ram_preview(preview, uid)
 
-                result = apply_translation(mask, translate_x, translate_y)
+                result = apply_translation(mask, final_tx, final_ty)
 
             else:
                 batch_size = mask.shape[0]
@@ -156,33 +166,47 @@ class MaskTranslationC:
 
                 for i in range(batch_size):
                     single_mask = mask[i:i+1]
-                    
+
+                    cur_tx, cur_ty, cur_enh = _get_params(uid, translate_x, translate_y, enhanced_visibility)
+                    start_time = time.time()
+                    preview = apply_translation_preview(single_mask, cur_tx, cur_ty, cur_enh)
+                    _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                    _send_ram_preview(preview, uid)
+
+                    final_tx = None
                     while True:
+                        triggered = False
+                        while not triggered:
+                            if _check_and_clear_params_changed(uid):
+                                triggered = True
+                                break
+                            if _check_and_clear_flag(uid, "apply"):
+                                final_tx, final_ty, _ = _get_params(uid, translate_x, translate_y, enhanced_visibility)
+                                break
+                            if _check_and_clear_flag(uid, "skip"):
+                                result_list.append(single_mask)
+                                final_tx = None
+                                break
+                            time.sleep(0.05)
+
+                        if not triggered:
+                            break
+
                         cur_tx, cur_ty, cur_enh = _get_params(uid, translate_x, translate_y, enhanced_visibility)
-                        
-                        preview_image = apply_translation_preview(single_mask, cur_tx, cur_ty, cur_enh)
-                        _send_ram_preview(preview_image, uid)
-
-                        if _check_and_clear_flag(uid, "apply"):
-                            final_tx, final_ty = cur_tx, cur_ty
-                            break
-
-                        if _check_and_clear_flag(uid, "skip"):
-                            result_list.append(single_mask)
-                            final_tx = None
-                            break
-                        
-                        time.sleep(0.25)
+                        start_time = time.time()
+                        preview = apply_translation_preview(single_mask, cur_tx, cur_ty, cur_enh)
+                        _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                        _send_ram_preview(preview, uid)
 
                     if final_tx is not None:
-                        processed = apply_translation(single_mask, final_tx, final_ty)
-                        result_list.append(processed)
+                        result_list.append(apply_translation(single_mask, final_tx, final_ty))
 
                 result = torch.cat(result_list, dim=0)
         else:
             result = apply_translation(mask, translate_x, translate_y)
-                
+
         return {"result": (result,)}
+
 
 NODE_CLASS_MAPPINGS = {"MaskTranslation": MaskTranslationC}
 NODE_DISPLAY_NAME_MAPPINGS = {"MaskTranslation": "Mask Translation"}

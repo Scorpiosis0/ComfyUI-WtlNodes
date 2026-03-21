@@ -555,4 +555,4 @@ class CameraDepthOfFieldC:
         return (output_img, output_blur_mask, output_in_focus, output_out_focus, output_border)
 
 NODE_CLASS_MAPPINGS = {"CameraDepthDOF": CameraDepthOfFieldC}
-NODE_DISPLAY_NAME_MAPPINGS = {"CameraDepthDOF": "Camera Depth of Field (WIP)"}
+NODE_DISPLAY_NAME_MAPPINGS = {"CameraDepthDOF": "Camera Depth of Field (WIP & Not Working RN)"}

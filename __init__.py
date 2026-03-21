@@ -31,6 +31,12 @@ SUBMODULES = [
     "image.ram_preview_image",
     "image.dithering",
     "image.ram_compare",
+    "image.ascii",
+    "image.film_grain",
+    "image.chromatic_aberration",
+    "image.film_artifact",
+    "image.image_filter",
+    "image.crt",
 ]
 
 # Initialize global mappings
@@ -125,6 +131,30 @@ NODE_HANDLERS = {
         "module": ".image.dithering",
         "params": ["dither_method", "r_levels", "g_levels", "b_levels", "dither_scale"]
     },
+    "asc": {
+        "module": ".image.ascii",
+        "params": ["red_weight", "green_weight", "blue_weight", "char_set", "char_size", "background", "font_name", "bold", "italic", "spacing"]
+    },
+    "fgr": {
+        "module": ".image.film_grain",
+        "params": ["intensity", "grain_size", "monochrome"]
+    },
+    "chromatic": {
+        "module": ".image.chromatic_aberration",
+        "params": ["offset_x", "offset_y", "red_scale", "blue_scale", "center_x", "center_y", "falloff"]
+    },
+    "fil": {
+        "module": ".image.film_artifact",
+        "params": ["intensity", "scratch_density", "scratch_max_length", "scratch_max_width", "dust_density", "dust_max_size", "hair_density", "hair_max_length", "light_leak_intensity", "vignette_strength", "seed"]
+    },
+    "iflt": {
+        "module": ".image.image_filter",
+        "params": ["filter_type", "strength", "edge_threshold", "neon_hue", "neon_blur"]
+    },
+    "crt": {
+        "module": ".image.crt",
+        "params": ["scanline_intensity", "scanline_width", "curvature", "chromatic_aberration", "halation", "phosphor_dots", "noise", "vignette"]
+    },
 }
 
 # Slider‑parameter route
@@ -154,10 +184,10 @@ async def tgsz_params(request):
     print(f"[{node_type.upper()}] Params updated for node {node_id}")
     return web.json_response({"status": "ok"})
 
-# Button‑press route (Apply / Skip)
+# Button‑press route (Apply / Skip / Apply Again)
 @server.PromptServer.instance.routes.post("/tgsz_control")
 async def tgsz_control(request):
-    """Handle **Apply** / **Skip** button clicks – set an in‑memory flag."""
+    """Handle **Apply** / **Skip** / **Apply Again** button clicks – set an in‑memory flag."""
     data = await request.json()
     node_id = str(data.get("node_id"))
     node_type = data.get("node_type")
@@ -166,7 +196,8 @@ async def tgsz_control(request):
     if not node_id or not node_type:
         return web.json_response({"status": "error", "reason": "node_id or node_type missing"}, status=400)
     
-    if action not in ("apply", "skip"):
+    # UPDATED: Now accepts "apply", "skip", AND "apply_again"
+    if action not in ("apply", "skip", "apply_again"):
         return web.json_response({"status": "error", "reason": "invalid action"}, status=400)
     
     if node_type not in NODE_HANDLERS:
@@ -183,6 +214,36 @@ async def tgsz_control(request):
     
     print(f"[{node_type.upper()}] Flag '{action}' set for node {node_id}")
     return web.json_response({"status": "ok"})
+
+# Get processing time route
+@server.PromptServer.instance.routes.get("/tgsz_time/{node_type}/{node_id}")
+async def tgsz_time(request):
+    """Get the processing time for a node."""
+    node_type = request.match_info.get("node_type")
+    node_id = request.match_info.get("node_id")
+    
+    if not node_id or not node_type:
+        return web.json_response({"status": "error", "reason": "node_id or node_type missing"}, status=400)
+    
+    if node_type not in NODE_HANDLERS:
+        return web.json_response({"status": "error", "reason": "invalid node_type"}, status=400)
+    
+    handler = NODE_HANDLERS[node_type]
+    
+    # Dynamically import module
+    from importlib import import_module
+    module = import_module(handler["module"], package=__package__)
+    
+    # Get processing time if function exists
+    if hasattr(module, '_get_processing_time'):
+        processing_ms, complete = module._get_processing_time(node_id)
+        return web.json_response({
+            "status": "ok", 
+            "processing_time_ms": processing_ms,
+            "complete": complete
+        })
+    else:
+        return web.json_response({"status": "ok", "processing_time_ms": 0, "complete": False})
 
 # Static web assets (unchanged)
 WEB_DIRECTORY = "./web"

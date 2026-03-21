@@ -22,6 +22,59 @@ let needsRefresh = false;
 app.registerExtension({
     name: "RAMCompare.ImageDisplay",
     
+    async init() {
+        const style = document.createElement("style");
+        style.textContent = `
+            /* RAM Compare button styles */
+            .ram-compare-save,
+            .ram-compare-copy {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+                font-size: 13px !important;
+                font-weight: 500 !important;
+                padding: 4px 8px !important;
+                border-radius: 2px !important;
+                cursor: pointer !important;
+                transition: background-color 0.15s ease, border-color 0.15s ease !important;
+                outline: none !important;
+                letter-spacing: 0.01em !important;
+                background-color: #52525b !important;
+                border: 2px solid #3f3f46 !important;
+                color: #ffffff !important;
+            }
+            
+            /* Save buttons */
+            .ram-compare-save:hover {
+                background-color: #8b5cf6 !important;
+                border-color: #7c3aed !important;
+            }
+            
+            .ram-compare-save:active {
+                background-color: #7c3aed !important;
+                border-color: #6d28d9 !important;
+            }
+            
+            /* Copy buttons - Square */
+            .ram-compare-copy {
+                width: 28px !important;
+                height: 28px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+            
+            .ram-compare-copy:hover {
+                background-color: #facc15 !important;
+                border-color: #eab308 !important;
+            }
+            
+            .ram-compare-copy:active {
+                background-color: #eab308 !important;
+                border-color: #ca8a04 !important;
+            }
+        `;
+        document.head.appendChild(style);
+    },
+    
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "RAMImageCompare") {
             
@@ -32,26 +85,25 @@ app.registerExtension({
                     onExecuted.apply(this, arguments);
                 }
                 
-                // Collect images from ram_preview messages
                 if (message?.ram_preview) {
-                    // Use compareImages instead of imgs to avoid default preview
                     this.compareImages = [];
                     this.compareImagesData = [];
                     
                     message.ram_preview.forEach((base64Data) => {
                         if (base64Data) {
                             const img = new Image();
+                            img.onload = () => {
+                                app.graph.setDirtyCanvas(true, false);
+                            };
                             img.src = `data:image/png;base64,${base64Data}`;
                             this.compareImages.push(img);
                             this.compareImagesData.push(base64Data);
                         }
                     });
                     
-                    // Save to storage
                     compareStorage.saveImages(this.id.toString(), this.compareImagesData);
                     compareNodes.set(this.id, this);
                     
-                    // Clear imgs to prevent default preview
                     this.imgs = [];
                     
                     app.graph.setDirtyCanvas(true, true);
@@ -69,7 +121,6 @@ app.registerExtension({
                 this.compareImages = [];
                 this.compareImagesData = [];
                 
-                // Get compare mode from widget
                 this.updateCompareMode();
                 
                 compareNodes.set(this.id, this);
@@ -89,13 +140,11 @@ app.registerExtension({
                     onConfigure.apply(this, arguments);
                 }
                 
-                // Update compare mode from widget
                 this.updateCompareMode();
                 
                 needsRefresh = true;
             };
 
-            // Helper to get compare mode from widget
             nodeType.prototype.updateCompareMode = function() {
                 const widget = this.widgets?.find(w => w.name === "compare_mode");
                 if (widget) {
@@ -105,7 +154,6 @@ app.registerExtension({
                 }
             };
 
-            // Helper to save image
             nodeType.prototype.saveImage = function(imageIndex) {
                 if (!this.compareImagesData || !this.compareImagesData[imageIndex]) {
                     console.error("No image data available");
@@ -115,7 +163,6 @@ app.registerExtension({
                 const base64Data = this.compareImagesData[imageIndex];
                 const imageName = imageIndex === 0 ? "A" : "B";
                 
-                // Convert base64 to blob
                 const byteCharacters = atob(base64Data);
                 const byteNumbers = new Array(byteCharacters.length);
                 for (let i = 0; i < byteCharacters.length; i++) {
@@ -124,7 +171,6 @@ app.registerExtension({
                 const byteArray = new Uint8Array(byteNumbers);
                 const blob = new Blob([byteArray], { type: 'image/png' });
                 
-                // Create download link
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -135,7 +181,31 @@ app.registerExtension({
                 URL.revokeObjectURL(url);
             };
 
-            // Helper to update pointer state (like Rgthree)
+            nodeType.prototype.copyImage = function(imageIndex) {
+                if (!this.compareImagesData || !this.compareImagesData[imageIndex]) {
+                    console.error("No image data available");
+                    return;
+                }
+                
+                const base64Data = this.compareImagesData[imageIndex];
+                
+                const byteCharacters = atob(base64Data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'image/png' });
+                
+                navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                ]).then(() => {
+                    console.log('Image copied to clipboard');
+                }).catch(err => {
+                    console.error('Failed to copy image:', err);
+                });
+            };
+
             nodeType.prototype.setIsPointerDown = function(down) {
                 const newIsDown = down && !!app.canvas.pointer_is_down;
                 if (this.isPointerDown !== newIsDown) {
@@ -150,25 +220,119 @@ app.registerExtension({
                 }
             };
 
-            // Add save buttons as widgets
             const onNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function() {
                 if (onNodeCreated) {
                     onNodeCreated.apply(this, arguments);
                 }
                 
-                // Add "Save Image A" button
-                const saveButtonA = this.addWidget("button", "💾 Save Image A", null, () => {
-                    this.saveImage(0);
-                }, { serialize: false });
+                // Create button rows container
+                const buttonsContainer = document.createElement("div");
+                buttonsContainer.style.cssText = `
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                    padding: 4px 8px 8px 8px;
+                    width: 100%;
+                `;
                 
-                // Add "Save Image B" button
-                const saveButtonB = this.addWidget("button", "💾 Save Image B", null, () => {
+                // Row A
+                const rowA = document.createElement("div");
+                rowA.style.cssText = `
+                    display: flex;
+                    gap: 4px;
+                    width: 100%;
+                `;
+                
+                const saveButtonA = document.createElement("button");
+                saveButtonA.textContent = '💾 Save Image A';
+                saveButtonA.className = 'ram-compare-save';
+                saveButtonA.style.flex = '1';
+                saveButtonA.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.saveImage(0);
+                });
+                
+                const copyButtonA = document.createElement("button");
+                copyButtonA.textContent = '📋';
+                copyButtonA.className = 'ram-compare-copy';
+                copyButtonA.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.copyImage(0);
+                });
+                
+                rowA.appendChild(saveButtonA);
+                rowA.appendChild(copyButtonA);
+                
+                // Row B
+                const rowB = document.createElement("div");
+                rowB.style.cssText = `
+                    display: flex;
+                    gap: 4px;
+                    width: 100%;
+                `;
+                
+                const saveButtonB = document.createElement("button");
+                saveButtonB.textContent = '💾 Save Image B';
+                saveButtonB.className = 'ram-compare-save';
+                saveButtonB.style.flex = '1';
+                saveButtonB.addEventListener('click', (e) => {
+                    e.stopPropagation();
                     this.saveImage(1);
-                }, { serialize: false });
+                });
+                
+                const copyButtonB = document.createElement("button");
+                copyButtonB.textContent = '📋';
+                copyButtonB.className = 'ram-compare-copy';
+                copyButtonB.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.copyImage(1);
+                });
+                
+                rowB.appendChild(saveButtonB);
+                rowB.appendChild(copyButtonB);
+                
+                buttonsContainer.appendChild(rowA);
+                buttonsContainer.appendChild(rowB);
+                
+                // Calculate button container height
+                const containerPadding = 12;
+                const buttonHeight = 28;
+                const gapHeight = 4;
+                const containerHeight = containerPadding + (2 * buttonHeight) + gapHeight;
+                
+                const buttonWidget = this.addDOMWidget("buttons", "custom", buttonsContainer, {
+                    serialize: false,
+                    hideOnZoom: false,
+                    getValue() { return null; },
+                    setValue(v) {}
+                });
+                
+                buttonWidget.computeSize = function(width) {
+                    return [width, containerHeight];
+                };
+                
+                const minWidth = 300;
+                const minHeight = 200;
+                
+                const originalOnResize = this.onResize;
+                this.onResize = function(size) {
+                    size[0] = Math.max(size[0], minWidth);
+                    size[1] = Math.max(size[1], minHeight);
+                    
+                    if (originalOnResize) {
+                        return originalOnResize.apply(this, arguments);
+                    }
+                };
+                
+                if (this.size[0] < minWidth || this.size[1] < minHeight) {
+                    this.size = [
+                        Math.max(this.size[0], minWidth),
+                        Math.max(this.size[1], minHeight)
+                    ];
+                }
             };
 
-            // Watch for widget changes
             const onWidgetChanged = nodeType.prototype.onWidgetChanged;
             nodeType.prototype.onWidgetChanged = function(name, value) {
                 if (onWidgetChanged) {
@@ -181,12 +345,11 @@ app.registerExtension({
                 }
             };
 
-            // Mouse interaction
             const onMouseMove = nodeType.prototype.onMouseMove;
             nodeType.prototype.onMouseMove = function(e, localPos, canvas) {
                 const result = onMouseMove ? onMouseMove.apply(this, arguments) : undefined;
                 
-                this.updateCompareMode(); // Update mode in case widget changed
+                this.updateCompareMode();
                 
                 if (this.compareMode === "slide") {
                     this.sliderPos = localPos[0];
@@ -201,7 +364,6 @@ app.registerExtension({
                 const result = onMouseEnter ? onMouseEnter.apply(this, arguments) : undefined;
                 this.isPointerOver = true;
                 
-                // Update pointer down state based on canvas state
                 this.setIsPointerDown(!!app.canvas.pointer_is_down);
                 
                 return result;
@@ -213,7 +375,6 @@ app.registerExtension({
                 this.isPointerOver = false;
                 this.sliderPos = null;
                 
-                // Stop pointer tracking
                 this.setIsPointerDown(false);
                 
                 app.graph.setDirtyCanvas(true, false);
@@ -224,7 +385,7 @@ app.registerExtension({
             nodeType.prototype.onMouseDown = function(e, localPos, canvas) {
                 const result = onMouseDown ? onMouseDown.apply(this, arguments) : undefined;
                 
-                this.updateCompareMode(); // Update mode
+                this.updateCompareMode();
                 
                 if (this.compareMode === "click") {
                     this.setIsPointerDown(true);
@@ -237,13 +398,11 @@ app.registerExtension({
             nodeType.prototype.onMouseUp = function(e, localPos, canvas) {
                 const result = onMouseUp ? onMouseUp.apply(this, arguments) : undefined;
                 
-                // Stop tracking pointer
                 this.setIsPointerDown(false);
                 
                 return result;
             };
 
-            // Override default drawing completely
             const onDrawBackground = nodeType.prototype.onDrawBackground;
             nodeType.prototype.onDrawBackground = function(ctx) {
                 if (onDrawBackground) {
@@ -251,10 +410,11 @@ app.registerExtension({
                 }
             };
 
-            // Custom drawing for comparison
             const onDrawForeground = nodeType.prototype.onDrawForeground;
             nodeType.prototype.onDrawForeground = function(ctx) {
-                // Don't call original to prevent default image preview
+                if (onDrawForeground) {
+                    onDrawForeground.apply(this, arguments);
+                }
                 
                 if (!this.compareImages || this.compareImages.length < 2) return;
 
@@ -265,14 +425,13 @@ app.registerExtension({
                 if (!imgA || !imgA.naturalWidth || !imgA.naturalHeight) return;
                 if (!imgB || !imgB.naturalWidth || !imgB.naturalHeight) return;
 
-                this.updateCompareMode(); // Update mode before drawing
+                this.updateCompareMode();
 
-                // Calculate top padding (space for widgets and inputs)
-                const topPadding = 120; // Increased for buttons
+                // Increased padding to clear buttons: dropdown (~30px) + buttons (72px) + margin (20px) = 122px
+                const topPadding = 160;
                 const sidePadding = 10;
                 const bottomPadding = 10;
 
-                // Calculate dimensions for EACH image independently
                 const calculateImageDimensions = (img) => {
                     const aspect = img.naturalWidth / img.naturalHeight;
                     const availableHeight = nodeHeight - topPadding - bottomPadding;
@@ -297,20 +456,21 @@ app.registerExtension({
                 const dimsA = calculateImageDimensions(imgA);
                 const dimsB = calculateImageDimensions(imgB);
 
-                // Draw image A (base layer)
+                // Clip everything below topPadding to prevent drawing behind widgets
                 ctx.save();
-                ctx.drawImage(imgA, dimsA.offsetX, dimsA.offsetY, dimsA.width, dimsA.height);
-                ctx.restore();
+                ctx.beginPath();
+                ctx.rect(0, topPadding, nodeWidth, nodeHeight - topPadding);
+                ctx.clip();
 
-                // Draw image B (overlay with clipping or full)
+                // Draw image A (base layer)
+                ctx.drawImage(imgA, dimsA.offsetX, dimsA.offsetY, dimsA.width, dimsA.height);
+
                 let showImageB = false;
                 let clipX = nodeWidth / 2;
 
                 if (this.compareMode === "click") {
-                    // Only show B while mouse is HELD DOWN
                     showImageB = this.isPointerDown;
                 } else {
-                    // Slide mode
                     showImageB = this.isPointerOver && this.sliderPos !== null;
                     if (showImageB) {
                         clipX = this.sliderPos;
@@ -318,7 +478,7 @@ app.registerExtension({
                 }
 
                 if (showImageB && this.compareMode === "slide") {
-                    // Slide mode: reveal from LEFT to RIGHT
+                    // Additional clipping for slider reveal
                     ctx.save();
                     ctx.beginPath();
                     ctx.rect(0, topPadding, clipX, nodeHeight - topPadding);
@@ -337,11 +497,11 @@ app.registerExtension({
                     ctx.stroke();
                     ctx.restore();
                 } else if (showImageB && this.compareMode === "click") {
-                    // Click mode: show full image B while holding
-                    ctx.save();
+                    // Draw full image B
                     ctx.drawImage(imgB, dimsB.offsetX, dimsB.offsetY, dimsB.width, dimsB.height);
-                    ctx.restore();
                 }
+                
+                ctx.restore(); // Restore main clip region
             };
         }
     }
@@ -358,10 +518,12 @@ setInterval(() => {
                 node.compareImagesData = cachedData;
                 cachedData.forEach((base64Data) => {
                     const img = new Image();
+                    img.onload = () => {
+                        app.graph.setDirtyCanvas(true, false);
+                    };
                     img.src = `data:image/png;base64,${base64Data}`;
                     node.compareImages.push(img);
                 });
-                // Keep imgs empty to prevent default preview
                 node.imgs = [];
             }
         }

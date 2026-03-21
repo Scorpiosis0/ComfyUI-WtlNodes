@@ -43,7 +43,13 @@ app.registerExtension({
             nodeData.name === "MaskRotation" ||
             nodeData.name === "MaskResize" ||
             nodeData.name === "CameraDepthDOF" ||
-            nodeData.name === "Dither"
+            nodeData.name === "Dither" ||
+            nodeData.name === "ASCII" ||
+            nodeData.name === "FilmGrain" ||
+            nodeData.name === "ChromaticAberration" ||
+            nodeData.name === "FilmArtifacts" ||
+            nodeData.name === "ImageFilters" ||
+            nodeData.name === "CRTEffect"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;

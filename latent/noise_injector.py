@@ -16,22 +16,24 @@ class LatentNoiseC:
         return {
             "required": {
                 "latent": ("LATENT",),
+                "sigmas": ("SIGMAS",),
                 "seed": ("INT", {
                     "default": 0,
                     "min": 0,
                     "max": 0xffffffffffffffff,
                 }),
                 "noise_type": (cls.NOISE_TYPES,),
-                "noise_strength": ("FLOAT", {
+                "noise_multiplier": ("FLOAT", {
                     "default": 1.0,
-                    "min": 0.0,
-                    "max": 100.0,
+                    "min": 0.1,
+                    "max": 3.0,
                     "step": 0.01,
+                    "tooltip": "Multiplier for noise strength (1.0 = sigma-matched)"
                 }),
                 "scale": ("FLOAT", {
                     "default": 10.0,
                     "min": 0.1,
-                    "max": 1000.0,
+                    "max": 100.0,
                     "step": 0.1,
                     "tooltip": "Scale/frequency of procedural noise patterns"
                 }),
@@ -43,9 +45,12 @@ class LatentNoiseC:
     FUNCTION = "add_noise"
     CATEGORY = "WtlNodes/latent"
 
-    def add_noise(self, latent, seed, noise_type, noise_strength, scale):
+    def add_noise(self, latent, sigmas, seed, noise_type, noise_multiplier, scale):
         samples = latent["samples"]
         batch, channels, height, width = samples.shape
+        
+        # Get sigma value (use the first/max sigma for noise scaling)
+        sigma = sigmas[0].item() if len(sigmas) > 0 else 1.0
         
         # Create generator for seed
         generator = torch.Generator(device=samples.device).manual_seed(seed)
@@ -66,8 +71,9 @@ class LatentNoiseC:
         else:
             noise = self._gaussian_noise(samples.shape, samples.dtype, samples.device, generator)
         
-        # Add noise to latent
-        noisy_samples = samples + (noise * noise_strength)
+        # Scale noise by sigma and multiplier
+        # multiplier allows artistic control while maintaining sigma-based scaling
+        noisy_samples = samples + (noise * sigma * noise_multiplier)
         
         return ({"samples": noisy_samples},)
     
@@ -276,6 +282,5 @@ class LatentNoiseC:
         
         return noise
 
-
 NODE_CLASS_MAPPINGS = {"LatentNoise": LatentNoiseC}
-NODE_DISPLAY_NAME_MAPPINGS = {"LatentNoise": "Add Noise to Latent (WIP)"}
+NODE_DISPLAY_NAME_MAPPINGS = {"LatentNoise": "Add Noise to Latent"}
