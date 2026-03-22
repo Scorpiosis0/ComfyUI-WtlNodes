@@ -39,10 +39,9 @@ def _load_artifact_cache():
 def _set_params(node_id: str, intensity: float, scratch_density: float, scratch_max_length: float,
                 scratch_max_width: int, dust_density: float, dust_max_size: float, hair_density: float, 
                 hair_max_length: float, light_leak_intensity: float, vignette_strength: float, seed: int) -> None:
-    """Write the newest slider values for *node_id*."""
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        entry["params"] = {
+        new_params = {
             "intensity": intensity,
             "seed": seed,
             "scratch_density": scratch_density,
@@ -55,6 +54,10 @@ def _set_params(node_id: str, intensity: float, scratch_density: float, scratch_
             "light_leak_intensity": light_leak_intensity,
             "vignette_strength": vignette_strength,
         }
+        if entry.get("params") != new_params:
+            entry["params"] = new_params
+            entry["params_changed"] = True
+            entry["processing_complete"] = False
 
 def _get_params(node_id: str, intensity: float, scratch_density: float, scratch_max_length: float,
                 scratch_max_width: int, dust_density: float, dust_max_size: float, hair_density: float, 
@@ -99,8 +102,28 @@ def _check_and_clear_flag(node_id: str, flag: str) -> bool:
             return True
         return False
 
+def _check_and_clear_params_changed(node_id: str) -> bool:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.get(node_id)
+        if not entry:
+            return False
+        if entry.get("params_changed"):
+            entry["params_changed"] = False
+            return True
+        return False
+
+def _set_processing_time(node_id: str, ms: int) -> None:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.setdefault(node_id, {})
+        entry["processing_time_ms"] = ms
+        entry["processing_complete"] = True
+
+def _get_processing_time(node_id: str) -> tuple:
+    with _CONTROL_LOCK:
+        entry = _CONTROL_STORE.get(node_id, {})
+        return (entry.get("processing_time_ms", 0), entry.get("processing_complete", False))
+
 def _clear_all(node_id: str) -> None:
-    """Remove *everything* stored for a node – used at the start of a run."""
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
 
@@ -584,47 +607,65 @@ class FilmArtifactsC:
             uid = str(unique_id)
 
             if apply_type == "apply_all":
+                (cur_intensity, cur_scratch_density, cur_scratch_max_length, cur_scratch_max_width,
+                 cur_dust_density, cur_dust_max_size, cur_hair_density,
+                 cur_hair_max_length, cur_light_leak_intensity,
+                 cur_vignette_strength, cur_seed) = _get_params(
+                    uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
+                    dust_density, dust_max_size, hair_density, hair_max_length,
+                    light_leak_intensity, vignette_strength, seed
+                )
+                start_time = time.time()
+                initial_image = apply_film_artifacts(
+                    image, cur_intensity, cur_scratch_density, cur_scratch_max_length,
+                    cur_scratch_max_width, cur_dust_density, cur_dust_max_size,
+                    cur_hair_density, cur_hair_max_length, cur_light_leak_intensity,
+                    cur_vignette_strength, cur_seed, cache
+                )
+                _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                _send_ram_preview(initial_image, uid)
+
                 while True:
+                    triggered = False
+                    while not triggered:
+                        if _check_and_clear_params_changed(uid):
+                            triggered = True
+                            break
+                        if _check_and_clear_flag(uid, "apply"):
+                            final_p = _get_params(
+                                uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
+                                dust_density, dust_max_size, hair_density, hair_max_length,
+                                light_leak_intensity, vignette_strength, seed
+                            )
+                            break
+                        if _check_and_clear_flag(uid, "skip"):
+                            return {"result": (image,)}
+                        time.sleep(0.05)
+
+                    if not triggered:
+                        break
+
                     (cur_intensity, cur_scratch_density, cur_scratch_max_length, cur_scratch_max_width,
                      cur_dust_density, cur_dust_max_size, cur_hair_density,
-                     cur_hair_max_length, cur_light_leak_intensity, 
+                     cur_hair_max_length, cur_light_leak_intensity,
                      cur_vignette_strength, cur_seed) = _get_params(
                         uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
                         dust_density, dust_max_size, hair_density, hair_max_length,
                         light_leak_intensity, vignette_strength, seed
                     )
+                    start_time = time.time()
                     cur_image = apply_film_artifacts(
                         image, cur_intensity, cur_scratch_density, cur_scratch_max_length,
                         cur_scratch_max_width, cur_dust_density, cur_dust_max_size,
                         cur_hair_density, cur_hair_max_length, cur_light_leak_intensity,
                         cur_vignette_strength, cur_seed, cache
                     )
+                    _set_processing_time(uid, int((time.time() - start_time) * 1000))
                     _send_ram_preview(cur_image, uid)
 
-                    if _check_and_clear_flag(uid, "apply"):
-                        intensity = cur_intensity
-                        scratch_density = cur_scratch_density
-                        scratch_max_length = cur_scratch_max_length
-                        scratch_max_width = cur_scratch_max_width
-                        dust_density = cur_dust_density
-                        dust_max_size = cur_dust_max_size
-                        hair_density = cur_hair_density
-                        hair_max_length = cur_hair_max_length
-                        light_leak_intensity = cur_light_leak_intensity
-                        vignette_strength = cur_vignette_strength
-                        seed = cur_seed
-                        break
-
-                    if _check_and_clear_flag(uid, "skip"):
-                        return {"result": (image,)}
-                    
-                    time.sleep(0.25)
-                    
                 result = apply_film_artifacts(
-                    image, intensity, scratch_density, scratch_max_length,
-                    scratch_max_width, dust_density, dust_max_size,
-                    hair_density, hair_max_length, light_leak_intensity,
-                    vignette_strength, seed, cache
+                    image, final_p[0], final_p[1], final_p[2], final_p[3], final_p[4],
+                    final_p[5], final_p[6], final_p[7], final_p[8], final_p[9], final_p[10], cache
                 )
 
             else:
@@ -633,38 +674,67 @@ class FilmArtifactsC:
 
                 for i in range(batch_size):
                     single_image = image[i:i+1]
-                    
+
+                    (cur_intensity, cur_scratch_density, cur_scratch_max_length, cur_scratch_max_width,
+                     cur_dust_density, cur_dust_max_size, cur_hair_density,
+                     cur_hair_max_length, cur_light_leak_intensity,
+                     cur_vignette_strength, cur_seed) = _get_params(
+                        uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
+                        dust_density, dust_max_size, hair_density, hair_max_length,
+                        light_leak_intensity, vignette_strength, seed
+                    )
+                    image_seed = cur_seed + i
+                    start_time = time.time()
+                    initial_image = apply_film_artifacts(
+                        single_image, cur_intensity, cur_scratch_density, cur_scratch_max_length,
+                        cur_scratch_max_width, cur_dust_density, cur_dust_max_size,
+                        cur_hair_density, cur_hair_max_length, cur_light_leak_intensity,
+                        cur_vignette_strength, image_seed, cache
+                    )
+                    _set_processing_time(uid, int((time.time() - start_time) * 1000))
+                    _send_ram_preview(initial_image, uid)
+
+                    final_params = None
                     while True:
+                        triggered = False
+                        while not triggered:
+                            if _check_and_clear_params_changed(uid):
+                                triggered = True
+                                break
+                            if _check_and_clear_flag(uid, "apply"):
+                                final_params = _get_params(
+                                    uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
+                                    dust_density, dust_max_size, hair_density, hair_max_length,
+                                    light_leak_intensity, vignette_strength, seed
+                                )
+                                break
+                            if _check_and_clear_flag(uid, "skip"):
+                                result_list.append(single_image)
+                                final_params = None
+                                break
+                            time.sleep(0.05)
+
+                        if not triggered:
+                            break
+
                         (cur_intensity, cur_scratch_density, cur_scratch_max_length, cur_scratch_max_width,
                          cur_dust_density, cur_dust_max_size, cur_hair_density,
-                         cur_hair_max_length, cur_light_leak_intensity, 
+                         cur_hair_max_length, cur_light_leak_intensity,
                          cur_vignette_strength, cur_seed) = _get_params(
                             uid, intensity, scratch_density, scratch_max_length, scratch_max_width,
                             dust_density, dust_max_size, hair_density, hair_max_length,
                             light_leak_intensity, vignette_strength, seed
                         )
                         image_seed = cur_seed + i
+                        start_time = time.time()
                         cur_image = apply_film_artifacts(
                             single_image, cur_intensity, cur_scratch_density, cur_scratch_max_length,
                             cur_scratch_max_width, cur_dust_density, cur_dust_max_size,
                             cur_hair_density, cur_hair_max_length, cur_light_leak_intensity,
                             cur_vignette_strength, image_seed, cache
                         )
+                        _set_processing_time(uid, int((time.time() - start_time) * 1000))
                         _send_ram_preview(cur_image, uid)
-
-                        if _check_and_clear_flag(uid, "apply"):
-                            final_params = (cur_intensity, cur_scratch_density, cur_scratch_max_length,
-                                          cur_scratch_max_width, cur_dust_density, cur_dust_max_size, 
-                                          cur_hair_density, cur_hair_max_length, cur_light_leak_intensity,
-                                          cur_vignette_strength, cur_seed)
-                            break
-
-                        if _check_and_clear_flag(uid, "skip"):
-                            result_list.append(single_image)
-                            final_params = None
-                            break
-                        
-                        time.sleep(0.25)
 
                     if final_params is not None:
                         image_seed = final_params[10] + i

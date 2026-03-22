@@ -21,7 +21,7 @@ const NODE_CONFIGS = {
     "CameraDepthDOF": {
         type: "interactive",
         nodeType: "cdof",
-        widgets: ["focal_point", "focus_falloff", "edge_fix", "focal_plane", "blur_strength"]
+        widgets: ["focal_point", "focus_falloff", "edge_fix", "focal_plane", "blur_strength", "in_focus_mask_fix", "bokeh_shape", "highlight_factor", "highlight_threshold_low", "highlight_threshold_high", "depth_aware_blur", "blur_fixed_edge"]
     },
     "Saturation": {
         type: "interactive",
