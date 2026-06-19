@@ -13,6 +13,7 @@ SUBMODULES = [
     "image.depth_dof",
     "image.camera_depth_dof",
     "latent.latent_a",
+    "latent.tiled_sampler",
     "latent.noise_injector",
     "image.highlight_shadow",
     "image.hue",
@@ -37,6 +38,10 @@ SUBMODULES = [
     "image.film_artifact",
     "image.image_filter",
     "image.crt",
+    "image.blind_comparer",
+    "logic.math_ops",
+    "logic.base_values",
+        
 ]
 
 # Initialize global mappings

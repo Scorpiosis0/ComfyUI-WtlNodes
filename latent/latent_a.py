@@ -76,7 +76,7 @@ class EmptyLatentC:
                 }),
                 "orientation": ("BOOLEAN", {
                     "default": False,
-                    "label_on": "Potrait",
+                    "label_on": "Portrait",
                     "label_off": "Landscape",
                 }),
                 "width": ("INT", {

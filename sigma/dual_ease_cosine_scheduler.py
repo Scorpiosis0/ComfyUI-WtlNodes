@@ -30,7 +30,7 @@ class DualEaseCosineSchedulerC:
                     "step": 0.1
                 }),
                 "rho_end": ("FLOAT",{
-                    "default": 1.0,
+                    "default": 1.2,
                     "min": 0.1,
                     "max": 20.0,
                     "step": 0.1

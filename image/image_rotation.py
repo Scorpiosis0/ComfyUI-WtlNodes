@@ -237,4 +237,4 @@ class ImageRotationC:
 
 
 NODE_CLASS_MAPPINGS = {"ImageRotation": ImageRotationC}
-NODE_DISPLAY_NAME_MAPPINGS = {"ImageRotate": "Image Rotation"}
+NODE_DISPLAY_NAME_MAPPINGS = {"ImageRotation": "Image Rotation"}
