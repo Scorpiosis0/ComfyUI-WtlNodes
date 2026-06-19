@@ -1,6 +1,14 @@
 # ComfyUI-WtlNodes
 
-A custom node pack for ComfyUI with image color tools, effects, transforms, mask utilities, latent helpers, and logic nodes. Most nodes include live preview support.
+A professional-grade custom node pack for ComfyUI built around accuracy, control, and a fast iterative workflow.
+
+Color grading nodes use proper color science — HSV-space adjustments, physically-based exposure in EV stops, Kelvin-accurate color temperature with luminance preservation, and tone-range isolation with Gaussian feathering. These are not simple RGB multipliers; the math is there to produce results that hold up under close inspection.
+
+Live preview is built into the majority of nodes: sliders update in real time while the workflow is paused, letting you dial in values before committing. Apply or skip without re-running the full graph. Batch images are handled one by one or all at once depending on your choice.
+
+On the effects side, nodes are designed for granular control rather than one-knob shortcuts. Retro film simulation, lens optics, and stylistic filters each expose the individual parameters that actually matter — intensity curves, physical shape options, per-channel behavior, threshold ranges — so you can craft an exact look rather than accept a preset.
+
+The same philosophy carries through to transforms, masks, latent utilities, and scheduling: sensible defaults, full range of options, no black boxes.
 
 ---
 
