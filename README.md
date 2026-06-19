@@ -1,117 +1,135 @@
-# 🧩 My ComfyUI Custom Node Pack
+# ComfyUI-WtlNodes
 
-![ComfyUI](https://img.shields.io/badge/ComfyUI-Custom%20Nodes-blue?style=for-the-badge)
-![Python](https://img.shields.io/badge/Python-3.10%2B-yellow?style=for-the-badge)
-![Stable Diffusion](https://img.shields.io/badge/Stable%20Diffusion-Compatible-green?style=for-the-badge)
+A custom node pack for ComfyUI with image color tools, effects, transforms, mask utilities, latent helpers, and logic nodes. Most nodes include live preview support.
 
 ---
 
-## 📌 Overview
-
-This repository contains a collection of **custom nodes for ComfyUI**, designed to simplify workflows and add new creative / utility features and genral QOL improvements.  
-
----
-
-## 🎯 Features
-
-- Easy plug-and-play installation  
-- Organized node categories  
-- Clear controllable parameters  
-- Designed for efficiency and expanded capability  
-
----
-
-## 📥 Installation
-
-### **Option 1 — Git Clone (Recommended)**
+## Installation
 
 ```bash
 cd ComfyUI/custom_nodes/
 git clone https://github.com/Scorpiosis0/ComfyUI-WtlNodes.git
 ```
 
-### **Option 2 — Manual Install**
-
-1. Click Code → Download ZIP
-2. Extract into:
-```bash
-ComfyUI/custom_nodes/YourNodePack/
-```
-
-## ⭐ Custom Nodes Overview
-A complete list of all custom nodes included in this pack.  
-Use the summary table below to quickly jump to any node’s documentation.
+Or download the ZIP and extract into `ComfyUI/custom_nodes/`.
 
 ---
 
-## 📚 Summary Table
-| Node Name | Short Description | Link |
-|---|---|---|
-| Saturation (HSV) | [Jump to Section](#saturation-hsv) |
-| Dual Ease Cosine Scheduler | [Jump to Section](#dual-ease-cosine-scheduler) |
-| Empty Latent (Advanced) | [Jump to Section](#empty-latent-advanced) |
-| Depth of Field (DOF) | [Jump to Section](#depth-of-field-dof) |
+## Node List
+
+### Color Adjustment
+
+These nodes adjust image color properties and support live interactive preview via `apply_type`.
+
+| Node | Description |
+|---|---|
+| **Brightness** | Multiplies pixel values to make the image brighter or darker. Range: -100 to 100. |
+| **Contrast** | Adjusts contrast around a 0.5 pivot point. Range: -100 to 100. |
+| **Exposure** | Adjusts exposure in stops using `2^exposure` multiplication. Range: -10 to 10 EV. |
+| **Saturation (HSV)** | Adjusts color saturation in HSV color space. Range: -100 to 100. |
+| **Hue** | Rotates the hue of the image in HSV space. Range: 0 to 360 degrees. |
+| **Temperature (Tanner Helland's algorithm)** | Shifts color temperature in Kelvin (1000K = warm orange, 6500K = neutral, 40000K = cold blue). |
+| **Highlight & Shadow** | Independently brighten/darken highlights and shadows. Includes midpoint and feather radius controls for smooth transitions. |
+
+**`apply_type` options (shared by all color nodes):**
+- `none` — apply the node value from the widget directly, no interactive preview
+- `auto_apply` — same as `none`, alias
+- `apply_all` — pause workflow, show live preview, wait for Apply/Skip button
+
 ---
 
-## 🧩 Node Documentation
+### Depth of Field
 
-### Saturation (HSV)
-*This node allows you to tweak image saturation through a live preview.*
+| Node | Description |
+|---|---|
+| **Depth of Field (DOF)** | Applies Gaussian blur using a depth map. Set `focus_depth` (0 = background, 1 = foreground), `focus_range` (falloff size), `hard_focus_range` (sharp zone around focus), `blur_strength`, and `edge_fix` to smooth out depth edge artifacts. Outputs image + blur mask. |
+| **Camera Depth of Field (WIP)** | Advanced DOF with bokeh shape (circle / hexagon / octagon), highlight bloom, depth-aware multi-level blur, and an in-focus mask fix for edge cleanup. Outputs image + blur mask + in-focus mask + out-of-focus mask + border mask. |
 
-**Settings:**
-| Setting Name | Description |
-|-------------|-------------|
-| saturation | Controls how many steps will be made. |
-| apply_type | Controls how to handle batches. |
-| Apply Effect | This button applies the effect of saturation. |
-| Skip Effect | This button skips the effect of saturation. |
+---
 
-### Dual Ease Cosine Scheduler
-*This node is a custom scheduler I made that needs further testing. It's been tested using FID (Fréchet Inception Distance) along ablation to find the rough best default values.*
+### Image Effects
 
-**Settings:**
-| Setting Name | Description |
-|-------------|-------------|
-| steps | Controls how many steps will be made. |
-| sigma_max | Controls the maximum sigma (max noise). |
-| min_sigma | Controls the minimum sigma (min noise). |
-| rho_start | Controls the strenght of the easing curve at the top. |
-| rho_end | Controls the strenght of the easing curve at the bottom. |
+All effects below support live preview via `apply_type`.
 
-**Recomended Usage:**
+| Node | Description |
+|---|---|
+| **Dither** | Reduces color depth using dithering. Methods: `none`, `bayer`, `arithmetic_add`, `blue_noise`. Controls per-channel color levels (R/G/B) and dither scale. |
+| **Film Grain** | Adds realistic film grain. Controls: `intensity`, `grain_size`, and `monochrome` toggle. |
+| **Chromatic Aberration** | Shifts red and blue channels independently by pixel offset and scale. Supports center point and falloff for lens-like radial distortion. |
+| **Film Artifacts** | Adds retro film damage: scratches, dust, hair, light leaks, and vignette. All elements are controlled by density and size sliders plus a seed for reproducibility. Requires a pre-generated cache file (`film_artifacts_cache.pkl`). |
+| **Image Filters** | Applies stylistic filters: `b&w`, `sepia`, `duotone`, `invert`, `cartoon`, `sketch`, `neon`, `high_contrast`, `emboss`, `infrared`. Includes `strength`, `edge_threshold`, and neon-specific controls. |
+| **CRT TV Effect** | Simulates a CRT monitor with scanlines, barrel curvature, chromatic aberration, halation (glow), phosphor dots, noise, and vignette. |
+| **ASCII Effect** | Converts the image to ASCII art. Controls: character set, font name, char size, character spacing, RGB channel weights for brightness mapping, background color, bold/italic toggles. |
 
-You can reduce the sigma_min value but I wouldn't recommend changing sigma_max setting.
+---
 
-### Empty Latent (Advanced)
-*This node will offer easy ratio selection along a plethora of resolutions, portrait and landscape mode, with still a manual mode.*
+### Image Transform
 
-**Settings:**
-| Setting Name | Description |
-|-------------|-------------|
-| use_ratio | Enables you to switch between Ratio Mode and Manual Mode. |
-| portrait_landscape | Enables you to switch between Portrait and Landscape while in ratio mode, thus inverting x and y values. |
-| ratio | Allows you to select a ratio from a predefined list. |
-| resolution | Allows you to select a resolution from a predefined list based on the ratio. All resolutions are multiples of 64 to avoid generation artifacts. |
-| width & height | Allows you to select the x and y resolution of the image manually. |
-| batch | Allows you to select the amount of created latent in one run. |
+| Node | Description |
+|---|---|
+| **Image Resize** | Resize by absolute dimensions or multiplier. Fit modes: `crop`, `adjust`, `fit`. Supports multiple interpolation methods and bg fill color. |
+| **Image Rotation** | Rotate by degrees (-360 to 360). Fit modes: `crop`, `fit`, `adjust`, `none`. |
+| **Image Zoom** | Zoom in/out with optional X/Y translation. Useful for crop-zoom effects. |
+| **Image Translation** | Shift image horizontally/vertically by pixel offset. |
 
-### Depth of Field (DOF)
-*This node uses a depth map that you can make via any depth map model to apply a depth blur effect with a real time preview.*
+---
 
-**Settings:**
-| Setting Name | Description |
-|-------------|-------------|
-| focus_depth | Enables you to set the focus point in the depth map, where 0 is the background and 1 the foreground. |
-| blur_strenght | Allows you to apply more or less blur on the depth that isn't in focus. |
-| focus_range | Allows you to choose the range/fall-off from the focus point to enlarge the focus range. |
-| edge_fix | On some depth models you might want to set this setting at a recomended value of 3 to remove sharp balck edges of foreground objects, when foreground objects are not the main focus, but midground/background objects. |
-| Apply Effect | This button applies the effect of blur. |
-| Skip Effect | This button skips the effect of blur. |
+### Mask
 
-**Recomended Usage:**
+| Node | Description |
+|---|---|
+| **Mask Processor** | Dilate (positive) or erode (negative) a mask, then feather the edges. |
+| **Mask Filter** | Filter a batch of masks by area size. Keeps masks `above_x`, `below_x`, or `between_x_y` a pixel-area threshold. Useful for removing small/large detected regions. |
+| **Mask Resize** | Resize a mask with the same options as Image Resize. Includes an `enhanced_visibility` toggle for easier preview. |
+| **Mask Rotation** | Rotate a mask. Same options as Image Rotation. |
+| **Mask Zoom** | Zoom and translate a mask. |
+| **Mask Translation** | Shift a mask horizontally/vertically. |
 
-Use Depth Anything V2 or DepthPro for best results, Depth pro is the best for characters but struggles with backgrounds.
+---
 
-# Notes 🗒️:
+### Latent
 
-- All good.
+| Node | Description |
+|---|---|
+| **Empty Latent (Advanced)** | Create an empty latent with aspect ratio presets (1:1, 3:2, 4:3, 5:3, 16:9, 16:10, 21:9, 32:9) and portrait/landscape toggle. Falls back to manual width/height. All resolutions are multiples of 64. Returns latent + latent dimensions + pixel dimensions. |
+| **Latent Noise Injector** | Injects procedural noise into a latent, scaled by the first sigma value. Noise types: `Gaussian`, `White`, `Perlin`, `Simplex`, `Worley`, `Voronoi`. Controls: `noise_multiplier` and `scale` (frequency). |
+| **Tiled Sampler (Custom Advanced)** | Samples large latents in tiles to reduce VRAM usage. Seam blending via cosine masks. Controls: tile factor, context size (pixels of surrounding image the model sees), seam flat width, and seam feather. Slot in the `sampling/custom_sampling` category. |
+
+---
+
+### Sigma / Scheduler
+
+| Node | Description |
+|---|---|
+| **Dual Ease Cosine Scheduler** | Custom sigma schedule with independent easing at the top (`rho_start`) and bottom (`rho_end`) of the curve. Tested with FID and ablation to find good default values. Works with any sampler that accepts SIGMAS. |
+| **Sigma Visualizer** | Renders a sigma schedule as a chart image, displayed in the node preview. Output only, no image is saved to disk. |
+
+---
+
+### Preview / Compare
+
+| Node | Description |
+|---|---|
+| **RAM Preview Image** | Previews images directly in the node without saving to disk. Useful for inspecting intermediate results. |
+| **RAM Image Compare** | Side-by-side image comparison with `slide` (drag divider) or `click` (click to toggle) modes. No disk I/O. |
+| **Blind Comparer** | Tournament bracket for comparing multiple images blindly. Connect any number of images; vote Left or Right each round. The bracket continues until a winner is found. |
+
+---
+
+### Logic
+
+Simple utility nodes for connecting numeric and text values.
+
+| Node | Description |
+|---|---|
+| **Int** | Outputs an integer constant. |
+| **Float** | Outputs a float constant. |
+| **Text** | Outputs a text string with multiline support. |
+| **Add** | Adds an int or float value to the input. |
+| **Subtract** | Subtracts an int or float value from the input. |
+| **Multiply** | Multiplies the input by an int or float value. |
+| **Divide** | Divides the input by an int or float value. Raises an error on division by zero. |
+| **Square** | Returns `x²` of the input. |
+| **Square Root** | Returns `√x` of the input. |
+| **Text Append** | Concatenates two or more strings with an optional separator. Slots expand dynamically as you connect inputs. |
+| **Int ↔ Float** | Casts between INT and FLOAT. |
