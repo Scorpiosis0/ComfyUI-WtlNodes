@@ -10,7 +10,6 @@ SUBMODULES = [
     "image.contrast",
     "image.exposure",
     "image.temperature",
-    "image.depth_dof",
     "image.camera_depth_dof",
     "latent.latent_a",
     "latent.tiled_sampler",
@@ -27,6 +26,7 @@ SUBMODULES = [
     "mask.mask_translation",
     "mask.mask_processor",
     "mask.mask_filter",
+    "mask.ram_preview_mask",
     "sigma.dual_ease_cosine_scheduler",
     "sigma.sigma_visualizer",
     "image.ram_preview_image",
@@ -56,13 +56,9 @@ for submodule in SUBMODULES:
 
 # Create registry for node handlers
 NODE_HANDLERS = {
-    "dof": {
-        "module": ".image.depth_dof",
-        "params": ["focus_depth", "focus_range", "edge_fix", "hard_focus_range","blur_strength"]
-    },
     "cdof": {
         "module": ".image.camera_depth_dof",
-        "params": ["focal_point", "focus_falloff", "edge_fix", "focal_plane", "blur_strength", "in_focus_mask_fix", "bokeh_shape", "highlight_factor", "highlight_threshold_low", "highlight_threshold_high", "depth_aware_blur", "blur_fixed_edge"]
+        "params": ["focal_point", "focus_falloff", "focal_plane", "blur_strength", "in_focus_mask_fix", "bokeh_shape", "highlight_factor", "highlight_threshold_low", "highlight_threshold_high", "preview_mode"]
     },
     "sat": {
         "module": ".image.saturation",

@@ -13,15 +13,10 @@ const NODE_CONFIGS = {
     },
     
     // Interactive effect nodes with Apply/Skip buttons
-    "DepthDOF": {
-        type: "interactive",
-        nodeType: "dof",
-        widgets: ["focus_depth", "focus_range", "edge_fix", "hard_focus_range", "blur_strength"]
-    },
     "CameraDepthDOF": {
         type: "interactive",
         nodeType: "cdof",
-        widgets: ["focal_point", "focus_falloff", "edge_fix", "focal_plane", "blur_strength", "in_focus_mask_fix", "bokeh_shape", "highlight_factor", "highlight_threshold_low", "highlight_threshold_high", "depth_aware_blur", "blur_fixed_edge"]
+        widgets: ["focal_point", "focus_falloff", "focal_plane", "blur_strength", "in_focus_mask_fix", "bokeh_shape", "highlight_factor", "highlight_threshold_low", "highlight_threshold_high", "preview_mode"]
     },
     "Saturation": {
         type: "interactive",

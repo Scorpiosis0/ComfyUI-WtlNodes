@@ -98,6 +98,13 @@ class EmptyLatentC:
                     "min": 1,
                     "max": 256,
                 }),
+                "latent_compression": ("INT", {
+                    "default": 8,
+                    "min": 1,
+                    "max": 64,
+                    "step": 1,
+                    "tooltip": "Spatial compression factor. SD/SDXL = 8, adjust for other architectures.",
+                }),
             }
         }
     
@@ -106,22 +113,18 @@ class EmptyLatentC:
     FUNCTION = "generate"
     CATEGORY = "WtlNodes/latent"
 
-    def generate(self, use_ratio, orientation, width, height, ratio, resolution, batch_size):
+    def generate(self, use_ratio, orientation, width, height, ratio, resolution, batch_size, latent_compression):
         if use_ratio:
             if orientation:
-                # Parse resolution string (e.g., "1024x1024")
                 h, w = map(int, resolution.split('x'))
             else:
                 w, h = map(int, resolution.split('x'))
         else:
-            # Use manual width/height
             w, h = width, height
-        
-        # Convert pixel dimensions to latent dimensions (SDXL uses 8x compression)
-        latent_width = w // 8
-        latent_height = h // 8
-        
-        # Create empty latent (SDXL uses 4 channels)
+
+        latent_width = w // latent_compression
+        latent_height = h // latent_compression
+
         latent = torch.zeros([batch_size, 4, latent_height, latent_width])
         
         return ({"samples": latent}, latent_width, latent_height, w, h)

@@ -8,32 +8,32 @@ from ..helper.ram_preview import _send_ram_preview
 
 _CONTROL_STORE: dict[str, dict] = {}
 _CONTROL_LOCK = threading.Lock()
+_LAST_COMPUTE: dict[str, tuple] = {}  # uid -> (compute_params, result, blur_mask, in_focus, out_focus, border)
 
-def _set_params(node_id: str, focal_point: float, focus_falloff: float, edge_fix: int,
+def _set_params(node_id: str, focal_point: float, focus_falloff: float,
                 focal_plane: float, blur_strength: float, in_focus_mask_fix: int,
                 bokeh_shape: str, highlight_factor: float, highlight_threshold_low: float,
-                highlight_threshold_high: float, depth_aware_blur: bool, blur_fixed_edge: bool) -> None:
+                highlight_threshold_high: float, preview_mode: str) -> None:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        new_params = (focal_point, focus_falloff, edge_fix, focal_plane, blur_strength,
+        new_params = (focal_point, focus_falloff, focal_plane, blur_strength,
                       in_focus_mask_fix, bokeh_shape, highlight_factor,
-                      highlight_threshold_low, highlight_threshold_high,
-                      depth_aware_blur, blur_fixed_edge)
+                      highlight_threshold_low, highlight_threshold_high, preview_mode)
         if entry.get("params") != new_params:
             entry["params"] = new_params
             entry["params_changed"] = True
             entry["processing_complete"] = False
 
-def _get_params(node_id: str, focal_point: float, focus_falloff: float, edge_fix: int,
+def _get_params(node_id: str, focal_point: float, focus_falloff: float,
                 focal_plane: float, blur_strength: float, in_focus_mask_fix: int,
                 bokeh_shape: str, highlight_factor: float, highlight_threshold_low: float,
-                highlight_threshold_high: float, depth_aware_blur: bool, blur_fixed_edge: bool) -> tuple:
+                highlight_threshold_high: float, preview_mode: str) -> tuple:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.get(node_id, {})
-        return entry.get("params", (focal_point, focus_falloff, edge_fix, focal_plane, blur_strength,
+        return entry.get("params", (focal_point, focus_falloff, focal_plane, blur_strength,
                                     in_focus_mask_fix, bokeh_shape, highlight_factor,
                                     highlight_threshold_low, highlight_threshold_high,
-                                    depth_aware_blur, blur_fixed_edge))
+                                    preview_mode))
 
 def _check_and_clear_params_changed(node_id: str) -> bool:
     with _CONTROL_LOCK:
@@ -59,8 +59,7 @@ def _get_processing_time(node_id: str) -> tuple:
 def _set_flag(node_id: str, flag: str) -> None:
     with _CONTROL_LOCK:
         entry = _CONTROL_STORE.setdefault(node_id, {})
-        flags = entry.setdefault("flags", {})
-        flags[flag] = True
+        entry.setdefault("flags", {})[flag] = True
 
 def _check_and_clear_flag(node_id: str, flag: str) -> bool:
     with _CONTROL_LOCK:
@@ -76,6 +75,17 @@ def _check_and_clear_flag(node_id: str, flag: str) -> bool:
 def _clear_all(node_id: str) -> None:
     with _CONTROL_LOCK:
         _CONTROL_STORE.pop(node_id, None)
+    _LAST_COMPUTE.pop(node_id, None)
+
+
+def _make_preview_tensor(result_np, blur_mask_np, in_focus_mask_np, preview_mode):
+    if preview_mode == "image":
+        preview = result_np
+    elif preview_mode == "in_focus_mask":
+        preview = np.stack([in_focus_mask_np] * 3, axis=-1)
+    else:  # "blur_mask"
+        preview = np.stack([blur_mask_np] * 3, axis=-1)
+    return torch.from_numpy(preview).unsqueeze(0).float()
 
 
 def create_bokeh_kernel(size, shape='circle'):
@@ -107,16 +117,23 @@ def create_bokeh_kernel(size, shape='circle'):
     return kernel
 
 
-def apply_masked_blur_optimized(img_tensor, blur_mask_tensor, kernel_size, bokeh_shape,
-                               highlight_threshold_low, highlight_threshold_high, highlight_factor,
-                               in_focus_mask_fix, blur_fixed_edge):
-    if kernel_size <= 1:
-        return img_tensor, torch.zeros_like(blur_mask_tensor), torch.ones_like(blur_mask_tensor), torch.zeros_like(blur_mask_tensor)
+def apply_depth_aware_blur(img_tensor, blur_mask_tensor, max_blur_strength, bokeh_shape,
+                           highlight_threshold_low, highlight_threshold_high, highlight_factor,
+                           in_focus_mask_fix):
+    """
+    8-level depth-graduated bokeh blur.
+
+    Each pixel is assigned a kernel size proportional to its blur_mask value, interpolated
+    between the two nearest precomputed levels. In-focus pixels (blur_mask < 0.01) have their
+    original values restored after blurring. The masked convolution zeroes out in-focus pixels
+    before each level's convolution to prevent sharp edges from leaking into background bokeh.
+    """
     device = img_tensor.device
     in_focus_threshold = 0.01
     in_focus_mask = blur_mask_tensor < in_focus_threshold
     out_of_focus_mask = ~in_focus_mask
     border_mask = torch.zeros_like(in_focus_mask)
+
     if in_focus_mask_fix > 0:
         in_focus_mask_np = in_focus_mask.cpu().numpy().astype(np.uint8)
         kernel_size_fix = in_focus_mask_fix * 2 + 1
@@ -126,103 +143,28 @@ def apply_masked_blur_optimized(img_tensor, blur_mask_tensor, kernel_size, bokeh
         border_mask = in_focus_mask_dilated & ~in_focus_mask
         out_of_focus_mask = out_of_focus_mask & ~in_focus_mask_dilated
         in_focus_mask = in_focus_mask_dilated
+
     luminance = 0.299 * img_tensor[:, :, 0] + 0.587 * img_tensor[:, :, 1] + 0.114 * img_tensor[:, :, 2]
     if highlight_factor > 0:
         v = (luminance - highlight_threshold_low) / (highlight_threshold_high - highlight_threshold_low + 1e-8)
         v = torch.clamp(v, 0, 1)
-        scaled_factor = 10.0 * highlight_factor * np.log(2)
-        weights = torch.exp(v * scaled_factor)
+        weights = torch.exp(v * 10.0 * highlight_factor * np.log(2))
     else:
         weights = torch.ones_like(luminance)
-    weights_3ch = weights.unsqueeze(-1)
-    weighted_img = img_tensor * weights_3ch
-    kernel_np = create_bokeh_kernel(kernel_size, bokeh_shape)
-    if kernel_np is None:
-        return img_tensor, in_focus_mask.float(), out_of_focus_mask.float(), border_mask.float()
-    kernel_torch = torch.from_numpy(kernel_np).to(device).float()
-    masked_img = weighted_img.clone()
-    masked_img[in_focus_mask] = 0.0
-    masked_weights = weights.clone()
-    masked_weights[in_focus_mask] = 0.0
-    masked_img_4d = masked_img.permute(2, 0, 1).unsqueeze(0)
-    masked_weights_4d = masked_weights.unsqueeze(0).unsqueeze(0)
-    kernel_4d = kernel_torch.unsqueeze(0).unsqueeze(0)
-    pad = kernel_size // 2
-    blurred_weighted_4d = F.conv2d(masked_img_4d, kernel_4d.repeat(3, 1, 1, 1), padding=pad, groups=3)
-    blurred_weights_4d = F.conv2d(masked_weights_4d, kernel_4d, padding=pad)
-    blurred_weighted = blurred_weighted_4d.squeeze(0).permute(1, 2, 0)
-    blurred_weights = blurred_weights_4d.squeeze(0).squeeze(0)
-    blurred_weights_3ch = blurred_weights.unsqueeze(-1)
-    blurred = blurred_weighted / (blurred_weights_3ch + 1e-8)
-    blurred = torch.clamp(blurred, 0, 1)
-    result = blurred.clone()
-    result[in_focus_mask & ~border_mask] = img_tensor[in_focus_mask & ~border_mask]
-    if blur_fixed_edge and border_mask.any():
-        border_img = img_tensor.clone()
-        border_img[~border_mask] = 0.0
-        gaussian_kernel_size = 5
-        sigma = 1.0
-        gaussian_kernel = torch.zeros((gaussian_kernel_size, gaussian_kernel_size), device=device)
-        center = gaussian_kernel_size // 2
-        for i in range(gaussian_kernel_size):
-            for j in range(gaussian_kernel_size):
-                x, y = i - center, j - center
-                gaussian_kernel[i, j] = np.exp(-(x**2 + y**2) / (2 * sigma**2))
-        gaussian_kernel = gaussian_kernel / gaussian_kernel.sum()
-        gaussian_kernel_4d = gaussian_kernel.unsqueeze(0).unsqueeze(0)
-        border_img_4d = border_img.permute(2, 0, 1).unsqueeze(0)
-        border_mask_4d = border_mask.float().unsqueeze(0).unsqueeze(0)
-        pad_g = gaussian_kernel_size // 2
-        blurred_border_4d = F.conv2d(border_img_4d, gaussian_kernel_4d.repeat(3, 1, 1, 1), padding=pad_g, groups=3)
-        border_validity_4d = F.conv2d(border_mask_4d, gaussian_kernel_4d, padding=pad_g)
-        blurred_border = blurred_border_4d.squeeze(0).permute(1, 2, 0)
-        border_validity = border_validity_4d.squeeze(0).squeeze(0).unsqueeze(-1)
-        blurred_border = blurred_border / (border_validity + 1e-8)
-        blurred_border = torch.clamp(blurred_border, 0, 1)
-        result[border_mask] = blurred_border[border_mask]
-    else:
-        result[border_mask] = img_tensor[border_mask]
-    print(f"[Camera DOF] Masked blur: in-focus={in_focus_mask.sum().item()}, out-of-focus={out_of_focus_mask.sum().item()}, border={border_mask.sum().item()}")
-    return result, in_focus_mask.float(), out_of_focus_mask.float(), border_mask.float()
 
+    weighted_img = img_tensor * weights.unsqueeze(-1)
 
-def apply_depth_aware_masked_blur_optimized(img_tensor, blur_mask_tensor, max_blur_strength, bokeh_shape,
-                                           highlight_threshold_low, highlight_threshold_high, highlight_factor,
-                                           in_focus_mask_fix, blur_fixed_edge):
-    device = img_tensor.device
-    in_focus_threshold = 0.01
-    in_focus_mask = blur_mask_tensor < in_focus_threshold
-    out_of_focus_mask = ~in_focus_mask
-    border_mask = torch.zeros_like(in_focus_mask)
-    if in_focus_mask_fix > 0:
-        in_focus_mask_np = in_focus_mask.cpu().numpy().astype(np.uint8)
-        kernel_size_fix = in_focus_mask_fix * 2 + 1
-        kernel_fix = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size_fix, kernel_size_fix))
-        in_focus_mask_dilated_np = cv2.dilate(in_focus_mask_np, kernel_fix, iterations=1)
-        in_focus_mask_dilated = torch.from_numpy(in_focus_mask_dilated_np).to(device).bool()
-        border_mask = in_focus_mask_dilated & ~in_focus_mask
-        out_of_focus_mask = out_of_focus_mask & ~in_focus_mask_dilated
-        in_focus_mask = in_focus_mask_dilated
-    luminance = 0.299 * img_tensor[:, :, 0] + 0.587 * img_tensor[:, :, 1] + 0.114 * img_tensor[:, :, 2]
-    if highlight_factor > 0:
-        v = (luminance - highlight_threshold_low) / (highlight_threshold_high - highlight_threshold_low + 1e-8)
-        v = torch.clamp(v, 0, 1)
-        scaled_factor = 10.0 * highlight_factor * np.log(2)
-        weights = torch.exp(v * scaled_factor)
-    else:
-        weights = torch.ones_like(luminance)
-    weights_3ch = weights.unsqueeze(-1)
-    weighted_img = img_tensor * weights_3ch
     num_levels = 8
     max_kernel = int(max_blur_strength * 2) * 2 + 1
     max_kernel = max(1, max_kernel)
     kernel_sizes = np.linspace(1, max_kernel, num_levels).astype(int)
     kernel_sizes = [k if k % 2 == 1 else k + 1 for k in kernel_sizes]
-    print(f"[Camera DOF] Depth-aware masked blur (GPU): {num_levels} levels, kernels: {kernel_sizes}")
+
     masked_img = weighted_img.clone()
     masked_img[in_focus_mask] = 0.0
     masked_weights = weights.clone()
     masked_weights[in_focus_mask] = 0.0
+
     blur_levels = []
     blur_weights_levels = []
     for kernel_size in kernel_sizes:
@@ -242,68 +184,35 @@ def apply_depth_aware_masked_blur_optimized(img_tensor, blur_mask_tensor, max_bl
         pad = kernel_size // 2
         blurred_weighted_4d = F.conv2d(masked_img_4d, kernel_4d.repeat(3, 1, 1, 1), padding=pad, groups=3)
         blurred_weights_4d = F.conv2d(masked_weights_4d, kernel_4d, padding=pad)
-        blurred_weighted = blurred_weighted_4d.squeeze(0).permute(1, 2, 0)
-        blurred_weights = blurred_weights_4d.squeeze(0).squeeze(0)
-        blur_levels.append(blurred_weighted)
-        blur_weights_levels.append(blurred_weights)
+        blur_levels.append(blurred_weighted_4d.squeeze(0).permute(1, 2, 0))
+        blur_weights_levels.append(blurred_weights_4d.squeeze(0).squeeze(0))
+
     blur_mask_scaled = blur_mask_tensor * (num_levels - 1)
-    level_indices = torch.floor(blur_mask_scaled).long()
-    level_indices = torch.clamp(level_indices, 0, num_levels - 2)
+    level_indices = torch.clamp(torch.floor(blur_mask_scaled).long(), 0, num_levels - 2)
     blend_factor = blur_mask_scaled - level_indices.float()
     blend_factor_3ch = blend_factor.unsqueeze(-1)
+
     result_weighted = torch.zeros_like(weighted_img)
     result_weights = torch.zeros_like(weights)
     for i in range(num_levels - 1):
         at_level = (level_indices == i).float()
-        at_level_3ch = at_level.unsqueeze(-1)
-        lower_weighted = blur_levels[i]
-        upper_weighted = blur_levels[i + 1]
-        lower_weights = blur_weights_levels[i]
-        upper_weights = blur_weights_levels[i + 1]
-        blended_weighted = lower_weighted * (1 - blend_factor_3ch) + upper_weighted * blend_factor_3ch
-        blended_weights = lower_weights * (1 - blend_factor) + upper_weights * blend_factor
-        result_weighted += blended_weighted * at_level_3ch
-        result_weights += blended_weights * at_level
-    at_max = (level_indices == num_levels - 2).float()
-    at_max_3ch = at_max.unsqueeze(-1)
-    result_weighted += blur_levels[-1] * at_max_3ch
-    result_weights += blur_weights_levels[-1] * at_max
-    result_weights_3ch = result_weights.unsqueeze(-1)
-    blurred = result_weighted / (result_weights_3ch + 1e-8)
-    blurred = torch.clamp(blurred, 0, 1)
+        blended_w = blur_levels[i] * (1 - blend_factor_3ch) + blur_levels[i + 1] * blend_factor_3ch
+        blended_wt = blur_weights_levels[i] * (1 - blend_factor) + blur_weights_levels[i + 1] * blend_factor
+        result_weighted += blended_w * at_level.unsqueeze(-1)
+        result_weights += blended_wt * at_level
+
+    blurred = torch.clamp(result_weighted / (result_weights.unsqueeze(-1) + 1e-8), 0, 1)
+
     result = blurred.clone()
     result[in_focus_mask & ~border_mask] = img_tensor[in_focus_mask & ~border_mask]
-    if blur_fixed_edge and border_mask.any():
-        border_img = img_tensor.clone()
-        border_img[~border_mask] = 0.0
-        gaussian_kernel_size = 5
-        sigma = 1.0
-        gaussian_kernel = torch.zeros((gaussian_kernel_size, gaussian_kernel_size), device=device)
-        center = gaussian_kernel_size // 2
-        for i in range(gaussian_kernel_size):
-            for j in range(gaussian_kernel_size):
-                x, y = i - center, j - center
-                gaussian_kernel[i, j] = np.exp(-(x**2 + y**2) / (2 * sigma**2))
-        gaussian_kernel = gaussian_kernel / gaussian_kernel.sum()
-        gaussian_kernel_4d = gaussian_kernel.unsqueeze(0).unsqueeze(0)
-        border_img_4d = border_img.permute(2, 0, 1).unsqueeze(0)
-        border_mask_4d = border_mask.float().unsqueeze(0).unsqueeze(0)
-        pad_g = gaussian_kernel_size // 2
-        blurred_border_4d = F.conv2d(border_img_4d, gaussian_kernel_4d.repeat(3, 1, 1, 1), padding=pad_g, groups=3)
-        border_validity_4d = F.conv2d(border_mask_4d, gaussian_kernel_4d, padding=pad_g)
-        blurred_border = blurred_border_4d.squeeze(0).permute(1, 2, 0)
-        border_validity = border_validity_4d.squeeze(0).squeeze(0).unsqueeze(-1)
-        blurred_border = blurred_border / (border_validity + 1e-8)
-        blurred_border = torch.clamp(blurred_border, 0, 1)
-        result[border_mask] = blurred_border[border_mask]
-    else:
-        result[border_mask] = img_tensor[border_mask]
+    result[border_mask] = img_tensor[border_mask]
+
     return result, in_focus_mask.float(), out_of_focus_mask.float(), border_mask.float()
 
 
-def _apply_dof_to_image(img, depth, focal_point, focus_falloff, focal_plane, edge_fix,
-                       blur_strength, bokeh_shape, highlight_threshold_low, highlight_threshold_high,
-                       highlight_factor, depth_aware_blur, in_focus_mask_fix, blur_fixed_edge):
+def _apply_dof_to_image(img, depth, focal_point, focus_falloff, focal_plane,
+                        blur_strength, bokeh_shape, highlight_threshold_low, highlight_threshold_high,
+                        highlight_factor, in_focus_mask_fix):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     img_tensor = torch.from_numpy(img).float().to(device)
     depth_tensor = torch.from_numpy(depth).float().to(device)
@@ -316,49 +225,21 @@ def _apply_dof_to_image(img, depth, focal_point, focus_falloff, focal_plane, edg
     hard_zone_min = focal_point - focal_plane
     hard_zone_max = focal_point + focal_plane
 
-    blur_mask_tensor = torch.zeros_like(depth_tensor)
+    blur_mask = torch.zeros_like(depth_tensor)
+    below = depth_tensor < hard_zone_min
+    blur_mask[below] = (hard_zone_min - depth_tensor[below]) / (focus_falloff + 1e-8)
+    above = depth_tensor > hard_zone_max
+    blur_mask[above] = (depth_tensor[above] - hard_zone_max) / (focus_falloff + 1e-8)
+    blur_mask = torch.clamp(blur_mask, 0, 1).squeeze()
 
-    below_mask = depth_tensor < hard_zone_min
-    blur_mask_tensor[below_mask] = (hard_zone_min - depth_tensor[below_mask]) / (focus_falloff + 1e-8)
+    result, in_focus_mask, out_of_focus_mask, border_mask = apply_depth_aware_blur(
+        img_tensor, blur_mask, blur_strength, bokeh_shape,
+        highlight_threshold_low, highlight_threshold_high, highlight_factor,
+        in_focus_mask_fix
+    )
 
-    above_mask = depth_tensor > hard_zone_max
-    blur_mask_tensor[above_mask] = (depth_tensor[above_mask] - hard_zone_max) / (focus_falloff + 1e-8)
-
-    blur_mask_tensor = torch.clamp(blur_mask_tensor, 0, 1).squeeze()
-
-    if edge_fix > 0:
-        blur_mask_np = blur_mask_tensor.cpu().numpy()
-        kernel_size = abs(edge_fix) * 2 + 1
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-        blur_mask_np = cv2.dilate(blur_mask_np, kernel, iterations=1)
-        blur_mask_np = cv2.erode(blur_mask_np, kernel, iterations=1)
-        blur_mask_tensor = torch.from_numpy(blur_mask_np).to(device)
-
-    if depth_aware_blur:
-        blurred, in_focus_mask, out_of_focus_mask, border_mask = apply_depth_aware_masked_blur_optimized(
-            img_tensor, blur_mask_tensor, blur_strength, bokeh_shape,
-            highlight_threshold_low, highlight_threshold_high, highlight_factor,
-            in_focus_mask_fix, blur_fixed_edge
-        )
-    else:
-        kernel_size = int(blur_strength * 2) * 2 + 1
-        kernel_size = max(1, kernel_size)
-        blurred, in_focus_mask, out_of_focus_mask, border_mask = apply_masked_blur_optimized(
-            img_tensor, blur_mask_tensor, kernel_size, bokeh_shape,
-            highlight_threshold_low, highlight_threshold_high, highlight_factor,
-            in_focus_mask_fix, blur_fixed_edge
-        )
-
-    blur_mask_3ch = blur_mask_tensor.unsqueeze(-1)
-    result = img_tensor * (1 - blur_mask_3ch) + blurred * blur_mask_3ch
-
-    result_np = result.cpu().numpy()
-    blur_mask_np = blur_mask_tensor.cpu().numpy()
-    in_focus_mask_np = in_focus_mask.cpu().numpy()
-    out_of_focus_mask_np = out_of_focus_mask.cpu().numpy()
-    border_mask_np = border_mask.cpu().numpy()
-
-    return result_np, blur_mask_np, in_focus_mask_np, out_of_focus_mask_np, border_mask_np
+    return (result.cpu().numpy(), blur_mask.cpu().numpy(),
+            in_focus_mask.cpu().numpy(), out_of_focus_mask.cpu().numpy(), border_mask.cpu().numpy())
 
 
 class CameraDepthOfFieldC:
@@ -372,14 +253,12 @@ class CameraDepthOfFieldC:
                 "blur_strength": ("FLOAT", {"default": 10.0, "min": 0.0, "max": 100.0, "step": 1.0, "round": 0.1}),
                 "focal_plane": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 0.5, "step": 0.01, "round": 0.001}),
                 "focus_falloff": ("FLOAT", {"default": 0.25, "min": 0.0, "max": 1.0, "step": 0.01, "round": 0.001}),
-                "edge_fix": ("INT", {"default": 0, "min": 0, "max": 5, "step": 1}),
                 "in_focus_mask_fix": ("INT", {"default": 0, "min": 0, "max": 10, "step": 1}),
                 "bokeh_shape": (["circle", "hexagon", "octagon"], {"default": "circle"}),
                 "highlight_factor": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05, "round": 0.01}),
                 "highlight_threshold_low": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05, "round": 0.01}),
                 "highlight_threshold_high": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05, "round": 0.01}),
-                "depth_aware_blur": ("BOOLEAN", {"default": False}),
-                "blur_fixed_edge": ("BOOLEAN", {"default": False}),
+                "preview_mode": (["blur_mask", "in_focus_mask", "image"], {"default": "blur_mask"}),
                 "apply_type": (["none", "auto_apply", "apply_all"],),
             },
             "hidden": {"unique_id": "UNIQUE_ID", "prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
@@ -391,8 +270,8 @@ class CameraDepthOfFieldC:
     CATEGORY = "WtlNodes/image"
 
     def apply_dof(self, image, depth_map, focal_point, blur_strength, focus_falloff, focal_plane,
-                  edge_fix, in_focus_mask_fix, bokeh_shape, highlight_factor, highlight_threshold_low,
-                  highlight_threshold_high, depth_aware_blur, blur_fixed_edge, apply_type,
+                  in_focus_mask_fix, bokeh_shape, highlight_factor, highlight_threshold_low,
+                  highlight_threshold_high, preview_mode, apply_type,
                   unique_id=None, prompt=None, extra_pnginfo=None):
 
         if unique_id:
@@ -401,33 +280,34 @@ class CameraDepthOfFieldC:
 
         if unique_id and _check_and_clear_flag(str(unique_id), "skip"):
             batch_size = image.shape[0]
-            empty_blur_mask = torch.zeros((batch_size, image.shape[1], image.shape[2]))
-            full_in_focus = torch.ones((batch_size, image.shape[1], image.shape[2]))
-            empty_out_focus = torch.zeros((batch_size, image.shape[1], image.shape[2]))
-            empty_border = torch.zeros((batch_size, image.shape[1], image.shape[2]))
-            return (image, empty_blur_mask, full_in_focus, empty_out_focus, empty_border)
+            empty = torch.zeros((batch_size, image.shape[1], image.shape[2]))
+            full = torch.ones((batch_size, image.shape[1], image.shape[2]))
+            return (image, empty, full, empty, empty)
 
         img_np = image.cpu().numpy()
         depth_np = depth_map.cpu().numpy()
         batch_size = img_np.shape[0]
 
-        # Non-interactive / auto_apply mode
+        # compute_params excludes preview_mode — 9 elements
+        def _run(img, depth, cp):
+            fp, ff, fpl, bs, ifmf, bsh, hf, htl, hth = cp
+            return _apply_dof_to_image(img, depth, fp, ff, fpl, bs, bsh, htl, hth, hf, ifmf)
+
+        def _defaults(uid):
+            return _get_params(uid, focal_point, focus_falloff, focal_plane, blur_strength,
+                               in_focus_mask_fix, bokeh_shape, highlight_factor,
+                               highlight_threshold_low, highlight_threshold_high,
+                               preview_mode)
+
         if not unique_id or apply_type == "auto_apply":
             results, blur_masks, in_focus_masks, out_of_focus_masks, border_masks = [], [], [], [], []
+            cp = (focal_point, focus_falloff, focal_plane, blur_strength,
+                  in_focus_mask_fix, bokeh_shape, highlight_factor,
+                  highlight_threshold_low, highlight_threshold_high)
             for b in range(batch_size):
-                result, blur_mask, in_focus, out_focus, border = _apply_dof_to_image(
-                    img_np[b], depth_np[b], focal_point, focus_falloff, focal_plane,
-                    edge_fix, blur_strength, bokeh_shape, highlight_threshold_low,
-                    highlight_threshold_high, highlight_factor, depth_aware_blur,
-                    in_focus_mask_fix, blur_fixed_edge
-                )
-                results.append(result)
-                blur_masks.append(blur_mask)
-                in_focus_masks.append(in_focus)
-                out_of_focus_masks.append(out_focus)
-                border_masks.append(border)
-            blur_mode = "depth-aware" if depth_aware_blur else "flat"
-            print(f"[Camera DOF] Applied ({blur_mode} mode)")
+                result, bm, ifm, ofm, borm = _run(img_np[b], depth_np[b], cp)
+                results.append(result); blur_masks.append(bm)
+                in_focus_masks.append(ifm); out_of_focus_masks.append(ofm); border_masks.append(borm)
             return (
                 torch.from_numpy(np.stack(results)).float(),
                 torch.from_numpy(np.stack(blur_masks)).float(),
@@ -436,82 +316,73 @@ class CameraDepthOfFieldC:
                 torch.from_numpy(np.stack(border_masks)).float(),
             )
 
-        # Interactive mode
         uid = str(unique_id)
         results, blur_masks, in_focus_masks, out_of_focus_masks, border_masks = [], [], [], [], []
-
-        def _unpack(p):
-            # p = (focal_point, focus_falloff, edge_fix, focal_plane, blur_strength,
-            #      in_focus_mask_fix, bokeh_shape, highlight_factor,
-            #      highlight_threshold_low, highlight_threshold_high,
-            #      depth_aware_blur, blur_fixed_edge)
-            return p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11]
-
-        def _defaults():
-            return _get_params(uid, focal_point, focus_falloff, edge_fix, focal_plane, blur_strength,
-                               in_focus_mask_fix, bokeh_shape, highlight_factor,
-                               highlight_threshold_low, highlight_threshold_high,
-                               depth_aware_blur, blur_fixed_edge)
-
-        def _run(img, depth, p):
-            fp, ff, ef, fpl, bs, ifmf, bsh, hf, htl, hth, dab, bfe = _unpack(p)
-            return _apply_dof_to_image(
-                img, depth,
-                fp, ff, fpl, ef, bs,          # focal_point, focus_falloff, focal_plane, edge_fix, blur_strength
-                bsh, htl, hth, hf, dab, ifmf, bfe
-            )
 
         for b in range(batch_size):
             img = img_np[b]
             depth = depth_np[b]
 
-            cur = _defaults()
-            start_time = time.time()
-            preview_result, preview_blur_mask, _, _, _ = _run(img, depth, cur)
-            _set_processing_time(uid, int((time.time() - start_time) * 1000))
-            mask_rgb = np.stack([preview_blur_mask, preview_blur_mask, preview_blur_mask], axis=-1)
-            _send_ram_preview(torch.from_numpy(mask_rgb).unsqueeze(0).float(), uid)
+            cur = _defaults(uid)
+            cp = cur[:9]
+            pm = cur[9]
+
+            # Skip recompute if only preview_mode changed
+            cached = _LAST_COMPUTE.get(uid)
+            if cached and cached[0] == cp:
+                result_np, blur_mask_np, ifm_np, ofm_np, bm_np = cached[1:]
+            else:
+                t0 = time.time()
+                result_np, blur_mask_np, ifm_np, ofm_np, bm_np = _run(img, depth, cp)
+                _set_processing_time(uid, int((time.time() - t0) * 1000))
+                _LAST_COMPUTE[uid] = (cp, result_np, blur_mask_np, ifm_np, ofm_np, bm_np)
+
+            _send_ram_preview(_make_preview_tensor(result_np, blur_mask_np, ifm_np, pm), uid)
 
             final_params = None
             while True:
                 triggered = False
                 while not triggered:
                     if _check_and_clear_params_changed(uid):
-                        triggered = True
-                        break
+                        triggered = True; break
                     if _check_and_clear_flag(uid, "apply"):
-                        final_params = _defaults()
-                        break
+                        final_params = _defaults(uid); break
                     if _check_and_clear_flag(uid, "skip"):
                         results.append(img)
                         blur_masks.append(np.zeros((img.shape[0], img.shape[1])))
                         in_focus_masks.append(np.ones((img.shape[0], img.shape[1])))
                         out_of_focus_masks.append(np.zeros((img.shape[0], img.shape[1])))
                         border_masks.append(np.zeros((img.shape[0], img.shape[1])))
-                        final_params = None
-                        break
+                        final_params = None; break
                     time.sleep(0.05)
-
                 if not triggered:
                     break
 
-                cur = _defaults()
-                start_time = time.time()
-                preview_result, preview_blur_mask, _, _, _ = _run(img, depth, cur)
-                _set_processing_time(uid, int((time.time() - start_time) * 1000))
-                mask_rgb = np.stack([preview_blur_mask, preview_blur_mask, preview_blur_mask], axis=-1)
-                _send_ram_preview(torch.from_numpy(mask_rgb).unsqueeze(0).float(), uid)
+                cur = _defaults(uid)
+                cp = cur[:9]
+                pm = cur[9]
+
+                cached = _LAST_COMPUTE.get(uid)
+                if cached and cached[0] == cp:
+                    result_np, blur_mask_np, ifm_np, ofm_np, bm_np = cached[1:]
+                else:
+                    t0 = time.time()
+                    result_np, blur_mask_np, ifm_np, ofm_np, bm_np = _run(img, depth, cp)
+                    _set_processing_time(uid, int((time.time() - t0) * 1000))
+                    _LAST_COMPUTE[uid] = (cp, result_np, blur_mask_np, ifm_np, ofm_np, bm_np)
+
+                _send_ram_preview(_make_preview_tensor(result_np, blur_mask_np, ifm_np, pm), uid)
 
             if final_params is not None:
-                result, blur_mask, in_focus, out_focus, border = _run(img, depth, final_params)
-                results.append(result)
-                blur_masks.append(blur_mask)
-                in_focus_masks.append(in_focus)
-                out_of_focus_masks.append(out_focus)
-                border_masks.append(border)
+                cp_final = final_params[:9]
+                cached = _LAST_COMPUTE.get(uid)
+                if cached and cached[0] == cp_final:
+                    result, bm, ifm, ofm, borm = cached[1:]
+                else:
+                    result, bm, ifm, ofm, borm = _run(img, depth, cp_final)
+                results.append(result); blur_masks.append(bm)
+                in_focus_masks.append(ifm); out_of_focus_masks.append(ofm); border_masks.append(borm)
 
-        blur_mode = "depth-aware" if depth_aware_blur else "flat"
-        print(f"[Camera DOF] Applied ({blur_mode} mode), mask fix: {in_focus_mask_fix}px, border blur: {blur_fixed_edge}")
         return (
             torch.from_numpy(np.stack(results)).float(),
             torch.from_numpy(np.stack(blur_masks)).float(),
@@ -520,5 +391,6 @@ class CameraDepthOfFieldC:
             torch.from_numpy(np.stack(border_masks)).float(),
         )
 
+
 NODE_CLASS_MAPPINGS = {"CameraDepthDOF": CameraDepthOfFieldC}
-NODE_DISPLAY_NAME_MAPPINGS = {"CameraDepthDOF": "Camera Depth of Field (WIP)"}
+NODE_DISPLAY_NAME_MAPPINGS = {"CameraDepthDOF": "Camera Depth of Field"}

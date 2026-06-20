@@ -49,7 +49,8 @@ app.registerExtension({
             nodeData.name === "ChromaticAberration" ||
             nodeData.name === "FilmArtifacts" ||
             nodeData.name === "ImageFilters" ||
-            nodeData.name === "CRTEffect"
+            nodeData.name === "CRTEffect" ||
+            nodeData.name === "RAMPreviewMask"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;
