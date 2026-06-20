@@ -148,7 +148,7 @@ const NODE_CONFIGS = {
     "CRTEffect": {
         type: "interactive",
         nodeType: "crt",
-        widgets: ["scanline_intensity", "scanline_width", "curvature", "chromatic_aberration", "halation", "phosphor_dots", "noise", "vignette"]
+        widgets: ["beam_intensity", "beam_position", "beam_width", "beam_glow", "scanline_intensity", "scanline_spacing", "curvature", "chromatic_aberration", "halation", "bloom", "phosphor_tint", "phosphor_dots", "phosphor_dot_size", "defocus", "noise", "vignette", "grayscale"]
     },
 };
 
