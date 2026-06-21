@@ -50,7 +50,9 @@ app.registerExtension({
             nodeData.name === "FilmArtifacts" ||
             nodeData.name === "ImageFilters" ||
             nodeData.name === "CRTEffect" ||
-            nodeData.name === "RAMPreviewMask"
+            nodeData.name === "RAMPreviewMask" ||
+            nodeData.name === "WtlImageCombiner" ||
+            nodeData.name === "WtlMaskCombiner"
         ) {
             
             const onExecuted = nodeType.prototype.onExecuted;
@@ -61,20 +63,29 @@ app.registerExtension({
                 }
                 
                 if (message?.ram_preview) {
-                    this.imgs = [];
-                    
+                    this._ramPreviewImgs = [];
+
                     message.ram_preview.forEach((base64Data) => {
                         const img = new Image();
+                        img.onload = () => {
+                            this.imgs = this._ramPreviewImgs;
+                            app.graph.setDirtyCanvas(true, false);
+                        };
                         img.src = `data:image/png;base64,${base64Data}`;
-                        this.imgs.push(img);
+                        this._ramPreviewImgs.push(img);
                     });
-                    
+                    this.imgs = this._ramPreviewImgs;
+
                     if (nodeData.name === "RAMPreviewImage") {
                         imageStorage.saveImage(this.id.toString(), message.ram_preview);
                         ramPreviewNodes.set(this.id, this);
                     }
-                    
+
                     app.graph.setDirtyCanvas(true, true);
+                } else if (this._ramPreviewImgs?.length) {
+                    // ComfyUI's own "executed" event (e.g. for OUTPUT_IS_LIST nodes) may
+                    // overwrite this.imgs via the base handler — restore our RAM preview.
+                    this.imgs = this._ramPreviewImgs;
                 }
             };
 

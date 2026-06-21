@@ -43,6 +43,10 @@ SUBMODULES = [
     "image.blind_comparer",
     "logic.math_ops",
     "logic.base_values",
+    "image.batch_image",
+    "mask.batch_mask",
+    "image.combine_image",
+    "mask.combine_mask",
         
 ]
 

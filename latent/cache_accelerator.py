@@ -304,7 +304,7 @@ class CacheAcceleratorC:
                     "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01
                 }),
                 "end_percent": ("FLOAT", {
-                    "default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01
+                    "default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01
                 }),
                 "verbose": ("BOOLEAN", {"default": False}),
             }

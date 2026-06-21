@@ -22,7 +22,6 @@ class RAMPreviewMaskC:
 
     def preview_mask(self, mask, unique_id=None):
         uid = str(unique_id) if unique_id else "preview"
-        # mask: (B, H, W) → (B, H, W, 3) — same pattern as MaskProcessor live preview
         mask_rgb = mask.unsqueeze(-1).repeat(1, 1, 1, 3)
         _send_ram_preview(mask_rgb, uid, resize=False)
         return ()
