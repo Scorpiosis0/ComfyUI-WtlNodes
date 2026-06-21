@@ -138,6 +138,12 @@ const NODE_CONFIGS = {
         setup: setupDualEaseSchedulerVisibility
     },
 
+    // Power Ease Scheduler: hide sigma sliders when model is connected
+    "PowerEaseScheduler": {
+        type: "special",
+        setup: setupPowerEaseSchedulerVisibility
+    },
+
     // NEW: Image Filters node with Apply Again button and conditional sliders
     "ImageFilters": {
         type: "interactive",
@@ -628,6 +634,27 @@ function setupImageFiltersVisibility(node) {
             }
         }
     });
+}
+
+function setupPowerEaseSchedulerVisibility(node) {
+    const sigmaMaxWidget = findWidgetByName(node, "sigma_max");
+    const sigmaMinWidget = findWidgetByName(node, "sigma_min");
+
+    const updateVisibility = () => {
+        const modelInput = node.inputs?.find(i => i.name === "model");
+        const modelConnected = modelInput?.link != null;
+        toggleWidget(node, sigmaMaxWidget, modelConnected);
+        toggleWidget(node, sigmaMinWidget, modelConnected);
+        node.setDirtyCanvas(true);
+    };
+
+    updateVisibility();
+
+    const origOnConnectionsChange = node.onConnectionsChange;
+    node.onConnectionsChange = function(type, index, connected, link_info, input) {
+        if (origOnConnectionsChange) origOnConnectionsChange.apply(this, arguments);
+        updateVisibility();
+    };
 }
 
 function setupDualEaseSchedulerVisibility(node) {
