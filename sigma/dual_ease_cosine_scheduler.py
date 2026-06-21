@@ -35,14 +35,21 @@ class DualEaseCosineSchedulerC:
                     "max": 20.0,
                     "step": 0.1
                 }),
+            },
+            "optional": {
+                "model": ("MODEL",),
             }
         }
-    
+
     RETURN_TYPES = ("SIGMAS",)
     FUNCTION = "get_sigmas"
     CATEGORY = "WtlNodes/sigma"
 
-    def get_sigmas(self, steps, sigma_max, sigma_min, rho_start, rho_end):
+    def get_sigmas(self, steps, sigma_max, sigma_min, rho_start, rho_end, model=None):
+        if model is not None:
+            ms = model.get_model_object("model_sampling")
+            sigma_max = float(ms.sigma_max)
+            sigma_min = float(ms.sigma_min)
         # x from 0 to 1 - use steps not steps+1, then append zero
         x = np.linspace(0, 1, steps, dtype=np.float64)
         

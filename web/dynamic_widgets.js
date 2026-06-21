@@ -132,6 +132,12 @@ const NODE_CONFIGS = {
         nodeType: "fil",
         widgets: ["intensity", "scratch_density", "scratch_max_length", "scratch_max_width", "dust_density", "dust_max_size", "hair_density", "hair_max_length", "light_leak_intensity", "vignette_strength", "seed"]
     },
+    // Dual Ease Cosine Scheduler: hide sigma sliders when model is connected
+    "DualEaseCosineScheduler": {
+        type: "special",
+        setup: setupDualEaseSchedulerVisibility
+    },
+
     // NEW: Image Filters node with Apply Again button and conditional sliders
     "ImageFilters": {
         type: "interactive",
@@ -622,6 +628,27 @@ function setupImageFiltersVisibility(node) {
             }
         }
     });
+}
+
+function setupDualEaseSchedulerVisibility(node) {
+    const sigmaMaxWidget = findWidgetByName(node, "sigma_max");
+    const sigmaMinWidget = findWidgetByName(node, "sigma_min");
+
+    const updateVisibility = () => {
+        const modelInput = node.inputs?.find(i => i.name === "model");
+        const modelConnected = modelInput?.link != null;
+        toggleWidget(node, sigmaMaxWidget, modelConnected);
+        toggleWidget(node, sigmaMinWidget, modelConnected);
+        node.setDirtyCanvas(true);
+    };
+
+    updateVisibility();
+
+    const origOnConnectionsChange = node.onConnectionsChange;
+    node.onConnectionsChange = function(type, index, connected, link_info, input) {
+        if (origOnConnectionsChange) origOnConnectionsChange.apply(this, arguments);
+        updateVisibility();
+    };
 }
 
 // ============================================================================
