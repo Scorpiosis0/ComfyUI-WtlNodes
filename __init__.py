@@ -47,7 +47,8 @@ SUBMODULES = [
     "mask.batch_mask",
     "image.combine_image",
     "mask.combine_mask",
-        
+    "latent.detail_sampler",
+
 ]
 
 # Initialize global mappings

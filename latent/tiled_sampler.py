@@ -73,6 +73,13 @@ def _cosine_mask(th, tw, device, dtype,
     return (wy.view(th, 1) * wx.view(1, tw)).unsqueeze(0).unsqueeze(0)
 
 
+def _si(ndim, y0=None, y1=None, x0=None, x1=None):
+    """Index tuple for spatial H/W dims in 4-D (B,C,H,W) or 5-D (B,C,T,H,W)."""
+    bc = (slice(None), slice(None))
+    mid = (slice(None),) if ndim == 5 else ()
+    return bc + mid + (slice(y0, y1), slice(x0, x1))
+
+
 def _make_strip_mask(flat_size, feather_lat, device, dtype):
     """
     1-D mask for a seam strip:
@@ -183,7 +190,12 @@ class TiledSamplerCustomAdvanced:
             guider.model_patcher, latent_samples, latent.get("downscale_ratio_spacial", None)
         )
 
-        B, C, H_lat, W_lat = latent_samples.shape
+        nd = latent_samples.ndim
+        if nd == 5:
+            B, C, T, H_lat, W_lat = latent_samples.shape
+        else:
+            B, C, H_lat, W_lat = latent_samples.shape
+            T = 1
 
         short_lat   = min(H_lat, W_lat)
         long_lat    = max(H_lat, W_lat)
@@ -220,8 +232,8 @@ class TiledSamplerCustomAdvanced:
         canvas = latent_samples.clone()
 
         accum  = torch.zeros_like(latent_samples)
-        weight = torch.zeros(B, 1, H_lat, W_lat,
-                             device=latent_samples.device, dtype=latent_samples.dtype)
+        w_shape = (B, 1, 1, H_lat, W_lat) if nd == 5 else (B, 1, H_lat, W_lat)
+        weight = torch.zeros(*w_shape, device=latent_samples.device, dtype=latent_samples.dtype)
 
         disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED
         pbar = comfy.utils.ProgressBar(total_tiles) if comfy.utils.PROGRESS_BAR_ENABLED else None
@@ -239,14 +251,14 @@ class TiledSamplerCustomAdvanced:
             print(f"[TiledSampler] Tile {tile_idx + 1}/{total_tiles} "
                   f"x={x0*8}:{x1*8} y={y0*8}:{y1*8} ({tw*8}×{th*8}px)")
 
-            padded_in = canvas[:, :, cy0:cy1, cx0:cx1]
+            padded_in = canvas[_si(nd, cy0, cy1, cx0, cx1)]
 
             tile_latent = latent.copy()
             tile_latent["samples"] = padded_in
 
             tile_mask = None
             if noise_mask is not None:
-                tile_mask = noise_mask[:, :, cy0:cy1, cx0:cx1]
+                tile_mask = noise_mask[_si(nd, cy0, cy1, cx0, cx1)]
                 tile_latent["noise_mask"] = tile_mask
 
             result = guider.sample(
@@ -255,12 +267,12 @@ class TiledSamplerCustomAdvanced:
                 denoise_mask=tile_mask, disable_pbar=disable_pbar, seed=noise.seed,
             ).to(comfy.model_management.intermediate_device())
 
-            tile_out = result[:, :, ry0:ry1, rx0:rx1]
-            canvas[:, :, y0:y1, x0:x1] = tile_out.detach()
+            tile_out = result[_si(nd, ry0, ry1, rx0, rx1)]
+            canvas[_si(nd, y0, y1, x0, x1)] = tile_out.detach()
 
             # Flat weight — no overlap so no blending needed, seam fix handles boundaries
-            accum [:, :, y0:y1, x0:x1] = tile_out
-            weight[:, :, y0:y1, x0:x1] = 1.0
+            accum [_si(nd, y0, y1, x0, x1)] = tile_out
+            weight[_si(nd, y0, y1, x0, x1)] = 1.0
 
             if pbar is not None:
                 pbar.update(1)
@@ -302,7 +314,7 @@ class TiledSamplerCustomAdvanced:
                 ry1 = ry0 + strip_h
 
                 # Full width strip crop from final latent
-                strip_in = final[:, :, cy0:cy1, :]  # (B, C, padded_h, W)
+                strip_in = final[_si(nd, cy0, cy1, None, None)]
 
                 # Build mask: flat 1.0 on seam, feathered edges
                 # mask shape matches strip (not padded) — (strip_h, W_lat)
@@ -310,12 +322,15 @@ class TiledSamplerCustomAdvanced:
                 strip_mask_1d = _make_strip_mask(max(1, flat_h), feather_lat,
                                                   final.device, final.dtype)
                 mask_h = strip_mask_1d.shape[0]
-                strip_mask = strip_mask_1d.view(1, 1, mask_h, 1).expand(B, 1, mask_h, W_lat)
-
-                # Pad mask to padded height (0 in context zones)
-                full_mask = torch.zeros(B, 1, cy1 - cy0, W_lat,
-                                        device=final.device, dtype=final.dtype)
-                full_mask[:, :, ry0:ry1, :] = strip_mask
+                if nd == 5:
+                    strip_mask = strip_mask_1d.view(1, 1, 1, mask_h, 1).expand(B, 1, T, mask_h, W_lat)
+                    full_mask = torch.zeros(B, 1, T, cy1 - cy0, W_lat,
+                                            device=final.device, dtype=final.dtype)
+                else:
+                    strip_mask = strip_mask_1d.view(1, 1, mask_h, 1).expand(B, 1, mask_h, W_lat)
+                    full_mask = torch.zeros(B, 1, cy1 - cy0, W_lat,
+                                            device=final.device, dtype=final.dtype)
+                full_mask[_si(nd, ry0, ry1, None, None)] = strip_mask
 
                 strip_latent = latent.copy()
                 strip_latent["samples"] = strip_in
@@ -332,9 +347,9 @@ class TiledSamplerCustomAdvanced:
                 ).to(comfy.model_management.intermediate_device())
 
                 # Blend back using mask
-                strip_out = strip_result[:, :, ry0:ry1, :]
-                final[:, :, y0:y1, :] = (
-                    final[:, :, y0:y1, :] * (1.0 - strip_mask) +
+                strip_out = strip_result[_si(nd, ry0, ry1, None, None)]
+                final[_si(nd, y0, y1, None, None)] = (
+                    final[_si(nd, y0, y1, None, None)] * (1.0 - strip_mask) +
                     strip_out * strip_mask
                 )
 
@@ -353,17 +368,21 @@ class TiledSamplerCustomAdvanced:
                 rx0 = x0 - cx0
                 rx1 = rx0 + strip_w
 
-                strip_in = final[:, :, :, cx0:cx1]  # (B, C, H, padded_w)
+                strip_in = final[_si(nd, None, None, cx0, cx1)]
 
                 flat_w = strip_w - 2 * feather_lat
                 strip_mask_1d = _make_strip_mask(max(1, flat_w), feather_lat,
                                                   final.device, final.dtype)
                 mask_w = strip_mask_1d.shape[0]
-                strip_mask = strip_mask_1d.view(1, 1, 1, mask_w).expand(B, 1, H_lat, mask_w)
-
-                full_mask = torch.zeros(B, 1, H_lat, cx1 - cx0,
-                                        device=final.device, dtype=final.dtype)
-                full_mask[:, :, :, rx0:rx1] = strip_mask
+                if nd == 5:
+                    strip_mask = strip_mask_1d.view(1, 1, 1, 1, mask_w).expand(B, 1, T, H_lat, mask_w)
+                    full_mask = torch.zeros(B, 1, T, H_lat, cx1 - cx0,
+                                            device=final.device, dtype=final.dtype)
+                else:
+                    strip_mask = strip_mask_1d.view(1, 1, 1, mask_w).expand(B, 1, H_lat, mask_w)
+                    full_mask = torch.zeros(B, 1, H_lat, cx1 - cx0,
+                                            device=final.device, dtype=final.dtype)
+                full_mask[_si(nd, None, None, rx0, rx1)] = strip_mask
 
                 strip_latent = latent.copy()
                 strip_latent["samples"] = strip_in
@@ -379,9 +398,9 @@ class TiledSamplerCustomAdvanced:
                     denoise_mask=full_mask, disable_pbar=disable_pbar, seed=noise.seed,
                 ).to(comfy.model_management.intermediate_device())
 
-                strip_out = strip_result[:, :, :, rx0:rx1]
-                final[:, :, :, x0:x1] = (
-                    final[:, :, :, x0:x1] * (1.0 - strip_mask) +
+                strip_out = strip_result[_si(nd, None, None, rx0, rx1)]
+                final[_si(nd, None, None, x0, x1)] = (
+                    final[_si(nd, None, None, x0, x1)] * (1.0 - strip_mask) +
                     strip_out * strip_mask
                 )
 
@@ -399,5 +418,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "TiledSamplerCustomAdvanced": "Tiled Sampler (Custom Advanced)",
+    "TiledSamplerCustomAdvanced": "Tiled Sampler (Custom Advanced) [WIP]",
 }

@@ -1,151 +1,247 @@
+import bisect
 import logging
+import math
 import torch
 import comfy.patcher_extension
 import comfy.model_patcher
 
 
+class CacheStream:
+    """x0 history of one calc_cond_batch output: one pass of a sampler eval x one cond slot."""
+
+    def __init__(self, signature, reason):
+        self.signature = signature
+        self.reason = reason
+        self.anchors = []  # (tau, x0), oldest first
+        self.last_seen = None
+
+    def add(self, tau, x0, max_anchors):
+        x0 = x0.detach().clone()
+        if self.anchors and abs(tau - self.anchors[-1][0]) < 1e-3:
+            # Same schedule position computed twice (e.g. Heun corrector then next step): keep the newer state.
+            self.anchors[-1] = (tau, x0)
+        else:
+            self.anchors.append((tau, x0))
+            del self.anchors[:-max_anchors]
+
+
+def _patch_fingerprint(transformer_options):
+    # Extra guidance passes (PAG, SLG, SAG...) are told apart from the main pass by their patches.
+    replace = transformer_options.get("patches_replace", {})
+    patches = transformer_options.get("patches", {})
+    return (tuple(sorted((str(k), tuple(sorted(str(b) for b in v))) for k, v in replace.items())),
+            tuple(sorted((str(k), len(v)) for k, v in patches.items())))
+
+
+def _active_uuids(cond, sigma):
+    # Same timestep-range test as samplers.get_area_and_mult: a prompt switch invalidates history.
+    active = []
+    for c in cond:
+        start, end = c.get("timestep_start"), c.get("timestep_end")
+        if start is not None and sigma > start:
+            continue
+        if end is not None and sigma < end:
+            continue
+        active.append(c.get("uuid"))
+    return tuple(active)
+
+
+def _follow_through(anchors):
+    # Fraction of the previous x0 move that the latest move continued (per unit of schedule time), in [0, 1]:
+    # 1 = steady trend, extrapolate fully; 0 = the move reversed (oscillation), hold x0.
+    (t0, a0), (t1, a1), (t2, a2) = anchors[-3:]
+    m1 = (a1 - a0) / (t1 - t0)
+    m2 = (a2 - a1) / (t2 - t1)
+    r = torch.dot(m2.flatten(), m1.flatten()).item() / max(torch.dot(m1.flatten(), m1.flatten()).item(), 1e-20)
+    return min(max(r, 0.0), 1.0)
+
+
+def _extrapolate(anchors, tau_now):
+    (tau_prev, x0_prev), (tau_cur, x0_cur) = anchors[-2:]
+    step = (tau_now - tau_cur) / (tau_cur - tau_prev) * (x0_cur - x0_prev)
+    return x0_cur + _follow_through(anchors) * step
+
+
+def _lowpass(x, sigma=2.0):
+    # Separable Gaussian blur over the two spatial (last) dims of a latent; sigma in latent pixels.
+    r = max(1, int(3 * sigma))
+    c = torch.arange(-r, r + 1, device=x.device, dtype=x.dtype)
+    g = torch.exp(-c ** 2 / (2 * sigma ** 2))
+    g = g / g.sum()
+    shape = x.shape
+    y = x.reshape(-1, 1, shape[-2], shape[-1])
+    mode = "reflect" if min(shape[-2], shape[-1]) > r else "replicate"
+    y = torch.nn.functional.conv2d(torch.nn.functional.pad(y, (r, r, 0, 0), mode=mode), g.view(1, 1, 1, -1))
+    y = torch.nn.functional.conv2d(torch.nn.functional.pad(y, (0, 0, r, r), mode=mode), g.view(1, 1, -1, 1))
+    return y.reshape(shape)
+
+
 class CacheHolder:
-    def __init__(self, cache_interval, start_percent, end_percent, verbose, output_channels):
-        self.name = "WtlCache"
+    name = "WtlCache"
+    min_anchors = 3
+    max_anchors = 3
+
+    def __init__(self, cache_interval, start_percent, end_percent, verbose):
         self.cache_interval = max(1, int(cache_interval))
         self.start_percent = start_percent
         self.end_percent = end_percent
         self.verbose = verbose
-        self.output_channels = output_channels
-        self.start_t = 0.0
-        self.end_t = 0.0
-        self.model_sampling = None
-        self.sigma_schedule = None
-        self.first_cond_uuid = None
-        self.initial_step = True
-        self.skip_current_step = False
-        self.window_step = 0
-        self.uuid_cache_diffs = {}
-        self.uuid_x0 = {}
-        self.uuid_prev_x0 = {}
-        self.total_steps_skipped = 0
-        self.state_metadata = None
-        self.cached_sigma = 1.0
-        self.prev_sigma = 1.0
-        # None = untested, True/False latched after first full compute (per-model, not per-run)
-        self.x0_valid = None
+        self.schedule = None
+        self.steps = 0
+        self.start_pos = 0.0
+        self.end_pos = 0.0
+        self.reset()
 
-    def prepare_timesteps(self, model_sampling):
-        self.model_sampling = model_sampling
-        self.start_t = model_sampling.percent_to_sigma(self.start_percent)
-        self.end_t = model_sampling.percent_to_sigma(self.end_percent)
+    def prepare(self, sigmas):
+        neg_log = [-math.log(s) for s in sigmas.detach().flatten().float().cpu().tolist() if s > 0]
+        if any(b < a for a, b in zip(neg_log, neg_log[1:])):
+            raise RuntimeError(f"{self.name}: the sigma schedule is not a decreasing curve (e.g. flipped or restart "
+                               f"sigmas), so steps cannot be cached. Remove Cache Accelerator from this workflow.")
+        self.schedule = neg_log if len(neg_log) >= 2 else None
+        # The window is a fraction of the sampling steps; positions are continuous step indices (see tau).
+        self.steps = sigmas.numel() - 1
+        self.start_pos = self.start_percent * self.steps
+        self.end_pos = self.end_percent * self.steps
         return self
 
-    def set_sigma_schedule(self, sigmas):
-        try:
-            self.sigma_schedule = sigmas.detach().to("cpu").flatten()
-        except Exception:
-            self.sigma_schedule = None
+    def window_steps(self):
+        first = math.ceil(self.start_pos - 1e-6)
+        last = min(math.ceil(self.end_pos - 1e-6), self.steps)
+        if last <= first:
+            return f"no steps of {self.steps} (nothing will be skipped)"
+        return f"steps {first + 1}-{last} of {self.steps}"
 
-    def is_past_end_timestep(self, sigmas) -> bool:
-        return not (sigmas[0] > self.end_t).item()
+    def reset(self):
+        self.streams = {}
+        self.depth = 0
+        self.eval_index = -1
+        self.window_evals = 0
+        self.pass_index = 0
+        self.tau_now = 0.0
+        self.last_tau = None
+        self.in_window = False
+        self.recording = False
+        self.skip_planned = False
+        self.model_called = False
+        self.forced_reason = None
+        self.total_evals = 0
+        self.predicted_evals = 0
+        self.forced = {}
+        return self
 
-    def in_window(self, sigmas) -> bool:
-        return (sigmas[0] <= self.start_t).item()
+    def clone(self):
+        return type(self)(self.cache_interval, self.start_percent, self.end_percent, self.verbose)
 
-    def has_first_cond_uuid(self, uuids) -> bool:
-        return self.first_cond_uuid in uuids
+    def tau(self, sigma):
+        # Position on the polled schedule as a continuous step index (interpolated in log-sigma), so the
+        # geometry follows the scheduler and off-grid evals (2S/SDE midpoints, churn) are not snapped.
+        a = self.schedule
+        if a is None:
+            return 0.0  # single-step schedule: nothing can be skipped
+        x = -math.log(max(sigma, 1e-12))
+        j = min(max(bisect.bisect_right(a, x) - 1, 0), len(a) - 2)
+        d = a[j + 1] - a[j]
+        return j + ((x - a[j]) / d if d > 1e-12 else 0.0)
 
-    def can_apply_cache_diff(self, uuids) -> bool:
-        return all(uuid in self.uuid_cache_diffs for uuid in uuids)
+    def begin_eval(self, sigma):
+        self.depth += 1
+        if self.depth > 1:
+            return
+        self.eval_index += 1
+        self.total_evals += 1
+        self.pass_index = 0
+        self.model_called = False
+        self.forced_reason = None
+        self.tau_now = self.tau(sigma)
+        if self.last_tau is not None and self.tau_now < self.last_tau - 1e-3:
+            # Schedule moved backwards (restart-style sampling): the history belongs to another trajectory.
+            self.streams = {}
+        self.last_tau = self.tau_now
+        self.recording = self.tau_now < self.end_pos - 1e-6
+        self.in_window = self.start_pos - 1e-6 <= self.tau_now < self.end_pos - 1e-6
+        self.skip_planned = False
+        if self.in_window:
+            self.skip_planned = self.window_evals % self.cache_interval != 0
+            self.window_evals += 1
 
-    def check_metadata(self, x) -> bool:
-        metadata = (x.device, x.dtype, x.shape[1:])
-        if self.state_metadata is None:
-            self.state_metadata = metadata
-            return True
-        if metadata == self.state_metadata:
-            return True
-        logging.warning(f"{self.name} - tensor shape/dtype/device changed, resetting state")
-        self.reset()
-        return False
+    def end_eval(self):
+        self.depth -= 1
+        if self.depth > 0:
+            return
+        if self.in_window and self.pass_index == 0:
+            raise RuntimeError(f"{self.name}: this sampler/guider does not go through calc_cond_batch, so its "
+                               f"steps cannot be cached. Remove Cache Accelerator from this workflow.")
+        if self.skip_planned:
+            if self.model_called:
+                reason = self.forced_reason or "unknown"
+                self.forced[reason] = self.forced.get(reason, 0) + 1
+            else:
+                self.predicted_evals += 1
+        if self.verbose:
+            state = "predicted" if self.skip_planned and not self.model_called else "computed"
+            logging.info(f"{self.name} - eval {self.eval_index} (step pos {self.tau_now:.2f}): {state}")
 
-    def _c_in(self, sigma, ref):
-        sigma_t = torch.tensor([sigma], device=ref.device, dtype=ref.dtype)
-        ones = torch.ones((1,) + tuple(ref.shape[1:]), device=ref.device, dtype=ref.dtype)
-        return self.model_sampling.calculate_input(sigma_t, ones).flatten()[0]
+    def abort_eval(self):
+        self.depth -= 1
 
-    def _validate_x0(self, output, xc, x_orig, x0, sigma):
-        # Confirm the denoised formula is invertible as model_output = (x_orig - x0) / sigma.
-        # True for eps and flow parameterizations; v-pred would fail form_ok and disable x0 mode.
-        mo_rec = (x_orig - x0) / sigma
-        form_ok = torch.allclose(mo_rec, output, rtol=1e-2, atol=1e-2)
-        sigma_t = torch.tensor([sigma], device=xc.device, dtype=xc.dtype)
-        ones = torch.ones((1,) + tuple(xc.shape[1:]), device=xc.device, dtype=xc.dtype)
-        lin_ok = torch.allclose(self.model_sampling.calculate_input(sigma_t, 2 * ones),
-                                2 * self.model_sampling.calculate_input(sigma_t, ones),
-                                rtol=1e-3, atol=1e-4)
-        ok = bool(form_ok and lin_ok)
-        logging.info(f"{self.name} - x0 mode "
-                     f"{'VALID' if ok else 'INVALID -> disabling'} "
-                     f"(invertible={bool(form_ok)}, linear_input={bool(lin_ok)})")
-        return ok
-
-    def _maybe_compute_x0(self, output, xc, sigma):
-        if self.model_sampling is None or sigma <= 1e-6:
-            return None
-        if self.x0_valid is False:
-            return None
-        try:
-            c_in = self._c_in(sigma, xc)
-            if not torch.isfinite(c_in) or c_in == 0:
-                self.x0_valid = False
-                return None
-            x_orig = xc / c_in
-            sigma_t = torch.tensor([sigma], device=xc.device, dtype=xc.dtype)
-            x0 = self.model_sampling.calculate_denoised(sigma_t, output, x_orig)
-            if self.x0_valid is None:
-                self.x0_valid = self._validate_x0(output, xc, x_orig, x0, sigma)
-            return x0 if self.x0_valid else None
-        except Exception as e:
-            logging.warning(f"{self.name} - x0 reconstruction failed ({e}); disabling")
-            self.x0_valid = False
-            return None
-
-    def update_cache_diff(self, output, x, uuids, sigma):
-        self.prev_sigma = self.cached_sigma
-        self.cached_sigma = sigma
-        for uuid in uuids:
-            if uuid in self.uuid_x0:
-                self.uuid_prev_x0[uuid] = self.uuid_x0[uuid]
-        if output.shape[1:] != x.shape[1:]:
-            slicing = []
-            skip_dim = True
-            for dim_o, dim_x in zip(output.shape, x.shape):
-                if not skip_dim and dim_o != dim_x:
-                    slicing.append(slice(dim_x - dim_o, None))
+    def streams_for_pass(self, conds, x_in, timestep, model_options):
+        p = self.pass_index
+        self.pass_index += 1
+        to = model_options.get("transformer_options", {})
+        window = getattr(to.get("context_window"), "index_list", None)
+        base = (tuple(x_in.shape), _patch_fingerprint(to), tuple(window) if window is not None else None)
+        sigma = float(timestep.flatten()[0])
+        streams = []
+        for i, cond in enumerate(conds):
+            if cond is None:
+                streams.append(None)
+                continue
+            signature = base + (_active_uuids(cond, sigma),)
+            s = self.streams.get((p, i))
+            if s is None or s.signature != signature or s.last_seen != self.eval_index - 1:
+                if s is None:
+                    reason = "no history yet"
+                elif s.signature != signature:
+                    reason = "conds or pass changed"
                 else:
-                    slicing.append(slice(None))
-                skip_dim = False
-            x = x[tuple(slicing)]
-        diff = output - x
-        x0_full = self._maybe_compute_x0(output, x, sigma)
-        batch_offset = diff.shape[0] // len(uuids)
-        for i, uuid in enumerate(uuids):
-            self.uuid_cache_diffs[uuid] = diff[i * batch_offset:(i + 1) * batch_offset, ...]
-            if x0_full is not None:
-                self.uuid_x0[uuid] = x0_full[i * batch_offset:(i + 1) * batch_offset, ...]
+                    reason = "pass was absent last step"
+                s = CacheStream(signature, reason)
+                self.streams[(p, i)] = s
+            s.last_seen = self.eval_index
+            streams.append(s)
+        return streams
 
-    def _step_index(self, sigma):
-        if self.sigma_schedule is None:
-            return None
-        return int((self.sigma_schedule - float(sigma)).abs().argmin().item())
+    def predict_pass(self, streams, x_in):
+        for s in streams:
+            if s is not None and len(s.anchors) < self.min_anchors:
+                self.forced_reason = self.forced_reason or s.reason
+                return None
+        return self.predict(streams, x_in)
 
-    def _extrapolation_t(self, sigma):
-        # Parameterize by step position in the actual polled schedule rather than raw sigma
-        # value, so geometry respects whatever curve shape the scheduler produced.
-        i_now = self._step_index(sigma)
-        i_c = self._step_index(self.cached_sigma)
-        i_p = self._step_index(self.prev_sigma)
-        if i_now is None or i_c is None or i_p is None:
-            return None
-        denom = i_c - i_p
-        return None if denom == 0 else (i_now - i_c) / denom
+    def predict(self, streams, x_in):
+        # Coarse structure (composition, shapes, colour areas) from the direction-aware prediction, fine detail
+        # from plain linear extrapolation, whose slight overshoot reads as crispness rather than drift.
+        faithful = self._direction(streams, x_in)
+        if x_in.ndim < 4:
+            return faithful
+        out = []
+        for s, f in zip(streams, faithful):
+            if s is None:
+                out.append(f)
+            else:
+                linear = self._linear(s)
+                out.append(linear + _lowpass(f - linear))
+        return out
+
+    def _direction(self, streams, x_in):
+        if len(streams) == 2 and None not in streams:
+            # cond/uncond pass: the CFG guidance difference can oscillate step to step while the uncond base
+            # trends smoothly, so each gets its own follow-through.
+            c, u = streams
+            guidance = [(tau, xc - xu) for (tau, xc), (_, xu) in zip(c.anchors, u.anchors)]
+            base = _extrapolate(u.anchors, self.tau_now)
+            return [base + _extrapolate(guidance, self.tau_now), base]
+        return [torch.zeros_like(x_in) if s is None else _extrapolate(s.anchors, self.tau_now) for s in streams]
 
     def _adaptive_cap(self, x0_cur, x0_prev):
         # Allow further extrapolation when x0 is stable (barely moving), clamp tight when
@@ -153,140 +249,75 @@ class CacheHolder:
         stability = (x0_cur - x0_prev).norm().item() / (x0_cur.norm().item() + 1e-8)
         return max(0.5, min(2.0, 1.0 / (stability * 4.0 + 0.5)))
 
-    def predict_diff(self, uuid, sigma, xc):
-        if self.x0_valid and uuid in self.uuid_x0 and sigma > 1e-6 and self.model_sampling is not None:
-            x0_cur = self.uuid_x0[uuid]
-            if uuid in self.uuid_prev_x0:
-                t_raw = self._extrapolation_t(sigma)
-                if t_raw is not None:
-                    cap = self._adaptive_cap(x0_cur, self.uuid_prev_x0[uuid])
-                    t = max(0.0, min(t_raw, cap))
-                    x0_now = x0_cur + t * (x0_cur - self.uuid_prev_x0[uuid])
-                    if self.verbose:
-                        logging.info(f"{self.name} - x0 t={t_raw:.3f} -> {t:.3f} (cap {cap:.2f})")
-                else:
-                    x0_now = x0_cur
-            else:
-                # One anchor: hold x0 flat. x0 tends toward the final image (not zero),
-                # so an origin-ratio would be wrong here.
-                x0_now = x0_cur
-            c_in = self._c_in(sigma, xc)
-            x_orig = xc / c_in
-            return (x_orig - x0_now) / sigma - xc
+    def _linear(self, stream):
+        (tau_prev, x0_prev), (tau_cur, x0_cur) = stream.anchors[-2:]
+        t_raw = (self.tau_now - tau_cur) / (tau_cur - tau_prev)
+        cap = self._adaptive_cap(x0_cur, x0_prev)
+        t = max(0.0, min(t_raw, cap))
+        if self.verbose:
+            logging.info(f"{self.name} - x0 t={t_raw:.3f} -> {t:.3f} (cap {cap:.2f})")
+        return x0_cur + t * (x0_cur - x0_prev)
 
-        # Fallback for models where x0 reconstruction is not supported.
-        s2 = self.cached_sigma
-        return self.uuid_cache_diffs[uuid] * (sigma / s2 if s2 > 0 else 1.0)
+    def record_pass(self, streams, out):
+        for s, o in zip(streams, out):
+            if s is not None:
+                s.add(self.tau_now, o, self.max_anchors)
 
-    def apply_cache_diff(self, x, uuids, sigma):
-        if self.first_cond_uuid in uuids:
-            self.total_steps_skipped += 1
-        batch_offset = x.shape[0] // len(uuids)
-        for i, uuid in enumerate(uuids):
-            xc_i = x[i * batch_offset:(i + 1) * batch_offset, ...]
-            predicted = self.predict_diff(uuid, sigma, xc_i)
-            batch_slice = [slice(i * batch_offset, (i + 1) * batch_offset)]
-            if x.shape[1:] != predicted.shape[1:]:
-                slicing = []
-                skip_this_dim = True
-                for dim_u, dim_x in zip(predicted.shape, x.shape):
-                    if skip_this_dim:
-                        skip_this_dim = False
-                        continue
-                    if dim_u != dim_x:
-                        slicing.append(slice(dim_x - dim_u, None))
-                    else:
-                        slicing.append(slice(None))
-                batch_slice = batch_slice + slicing
-            x[tuple(batch_slice)] += predicted.to(x.device)
-        return x
-
-    def reset(self):
-        self.first_cond_uuid = None
-        self.initial_step = True
-        self.skip_current_step = False
-        self.window_step = 0
-        del self.uuid_cache_diffs
-        self.uuid_cache_diffs = {}
-        self.uuid_x0 = {}
-        self.uuid_prev_x0 = {}
-        self.total_steps_skipped = 0
-        self.state_metadata = None
-        self.cached_sigma = 1.0
-        self.prev_sigma = 1.0
-        return self
-
-    def clone(self):
-        return CacheHolder(self.cache_interval, self.start_percent, self.end_percent,
-                           self.verbose, self.output_channels)
-
-
-def cache_forward_wrapper(executor, *args, **kwargs):
-    transformer_options = args[-1]
-    if not isinstance(transformer_options, dict):
-        transformer_options = kwargs.get("transformer_options")
-    cache: CacheHolder = transformer_options["wtlcache"]
-
-    x = args[0][:, :cache.output_channels]
-    sigmas = transformer_options["sigmas"]
-    uuids = transformer_options["uuids"]
-
-    if sigmas is not None and cache.is_past_end_timestep(sigmas):
-        return executor(*args, **kwargs)
-
-    if cache.in_window(sigmas):
-        cache.check_metadata(x)
-        can_apply = cache.can_apply_cache_diff(uuids)
-
-        if cache.skip_current_step and can_apply:
-            return cache.apply_cache_diff(x, uuids, sigmas[0].item())
-
-        if cache.initial_step:
-            cache.first_cond_uuid = uuids[0]
-            cache.initial_step = False
-
-        if cache.has_first_cond_uuid(uuids):
-            compute_full = (cache.window_step % cache.cache_interval == 0)
-            cache.window_step += 1
-            if not compute_full and can_apply:
-                cache.skip_current_step = True
-                return cache.apply_cache_diff(x, uuids, sigmas[0].item())
-
-    full_output = executor(*args, **kwargs)
-    output = full_output[:, :cache.output_channels]
-    cache.update_cache_diff(output, x, uuids, sigmas[0].item())
-    return full_output
+    def log_summary(self):
+        if self.total_evals == 0:
+            return
+        computed = self.total_evals - self.predicted_evals
+        msg = (f"{self.name} - {self.total_evals} model evals: {self.predicted_evals} predicted, {computed} computed "
+               f"({self.total_evals / max(computed, 1):.2f}x fewer model calls)")
+        if self.forced:
+            msg += "; planned skips that ran for real: " + ", ".join(f"{n}x {r}" for r, n in self.forced.items())
+        logging.info(msg)
 
 
 def cache_calc_cond_batch_wrapper(executor, *args, **kwargs):
-    model_options = args[-1]
+    _, conds, x_in, timestep, model_options = args[:5]
     cache: CacheHolder = model_options["transformer_options"]["wtlcache"]
-    cache.skip_current_step = False
-    return executor(*args, **kwargs)
+    if cache.depth == 0:
+        raise RuntimeError(f"{cache.name}: calc_cond_batch was called outside a sampler evaluation, so this "
+                           f"sampling path cannot be cached. Remove Cache Accelerator from this workflow.")
+    streams = cache.streams_for_pass(conds, x_in, timestep, model_options)
+    if cache.skip_planned:
+        predicted = cache.predict_pass(streams, x_in)
+        if predicted is not None:
+            return predicted
+    out = executor(*args, **kwargs)
+    cache.model_called = True
+    if cache.recording:
+        cache.record_pass(streams, out)
+    return out
+
+
+def cache_predict_noise_wrapper(executor, *args, **kwargs):
+    cache: CacheHolder = executor.class_obj.model_options["transformer_options"]["wtlcache"]
+    cache.begin_eval(float(args[1].flatten()[0]))
+    try:
+        out = executor(*args, **kwargs)
+    except BaseException:
+        cache.abort_eval()
+        raise
+    cache.end_eval()
+    return out
 
 
 def cache_sample_wrapper(executor, *args, **kwargs):
     guider = executor.class_obj
     orig_model_options = guider.model_options
+    sigmas = args[3] if len(args) > 3 else kwargs["sigmas"]
     try:
         guider.model_options = comfy.model_patcher.create_model_options_clone(orig_model_options)
-        cache = guider.model_options["transformer_options"]["wtlcache"].clone().prepare_timesteps(
-            guider.model_patcher.model.model_sampling
-        )
-        cache.set_sigma_schedule(args[3])
+        cache = guider.model_options["transformer_options"]["wtlcache"].clone().prepare(sigmas)
         guider.model_options["transformer_options"]["wtlcache"] = cache
         logging.info(f"{cache.name} enabled - interval: {cache.cache_interval}, "
-                     f"window: [{cache.start_percent}, {cache.end_percent}]")
+                     f"window: [{cache.start_percent}, {cache.end_percent}] = {cache.window_steps()}")
         return executor(*args, **kwargs)
     finally:
         cache = guider.model_options["transformer_options"]["wtlcache"]
-        total_steps = len(args[3]) - 1
-        try:
-            speedup = total_steps / (total_steps - cache.total_steps_skipped)
-        except ZeroDivisionError:
-            speedup = 1.0
-        logging.info(f"{cache.name} - skipped {cache.total_steps_skipped}/{total_steps} steps "
-                     f"({speedup:.2f}x speedup).")
+        cache.log_summary()
         cache.reset()
         guider.model_options = orig_model_options
 
@@ -298,15 +329,24 @@ class CacheAcceleratorC:
             "required": {
                 "model": ("MODEL",),
                 "cache_interval": ("INT", {
-                    "default": 2, "min": 1, "max": 10, "step": 1
+                    "default": 2, "min": 1, "max": 8, "step": 1,
+                    "tooltip": "Inside the window, run the model every N evaluations and predict the ones in "
+                               "between. 1 = never skip."
                 }),
                 "start_percent": ("FLOAT", {
-                    "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01
+                    "default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "Where skipping starts, as a fraction of the sampling steps (0.2 of 40 steps = "
+                               "from step 9). The console shows which steps the window covers."
                 }),
                 "end_percent": ("FLOAT", {
-                    "default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01
+                    "default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "Where skipping stops, as a fraction of the sampling steps (0.9 of 40 steps = "
+                               "up to step 36). The steps after it always run fully."
                 }),
-                "verbose": ("BOOLEAN", {"default": False}),
+                "verbose": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Log every evaluation (computed / predicted) and the extrapolation values."
+                }),
             }
         }
 
@@ -315,18 +355,17 @@ class CacheAcceleratorC:
     CATEGORY = "WtlNodes/sampling"
 
     def patch(self, model, cache_interval, start_percent, end_percent, verbose):
+        if "wtlcache" in model.model_options.get("transformer_options", {}):
+            raise RuntimeError("Cache Accelerator is already applied to this model; use only one per model chain.")
         model = model.clone()
-        holder = CacheHolder(
-            cache_interval, start_percent, end_percent, verbose,
-            output_channels=model.model.latent_format.latent_channels,
-        )
-        model.model_options["transformer_options"]["wtlcache"] = holder
+        model.model_options["transformer_options"]["wtlcache"] = CacheHolder(
+            cache_interval, start_percent, end_percent, verbose)
         model.add_wrapper_with_key(
             comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, "wtlcache", cache_sample_wrapper)
         model.add_wrapper_with_key(
-            comfy.patcher_extension.WrappersMP.CALC_COND_BATCH, "wtlcache", cache_calc_cond_batch_wrapper)
+            comfy.patcher_extension.WrappersMP.PREDICT_NOISE, "wtlcache", cache_predict_noise_wrapper)
         model.add_wrapper_with_key(
-            comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, "wtlcache", cache_forward_wrapper)
+            comfy.patcher_extension.WrappersMP.CALC_COND_BATCH, "wtlcache", cache_calc_cond_batch_wrapper)
         return (model,)
 
 
